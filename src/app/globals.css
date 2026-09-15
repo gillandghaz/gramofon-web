@@ -178,3 +178,281 @@ input {
   justify-content: center;
   gap: 10px;
 }
+
+/* ============================== Dashboard ============================== */
+
+.dashboard-page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  /* env(safe-area-inset-*) = jarak aman dari notch (atas) dan home
+     indicator (bawah) di iPhone, dan dari gesture bar Android — supaya
+     tombol/konten tidak pernah kepotong atau tertutup elemen sistem. */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+.dashboard-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-surface);
+}
+.dashboard-brand {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.dashboard-shell {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  padding: 28px 16px;
+  overflow: auto;
+}
+
+.dashboard-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 148px;
+  flex-shrink: 0;
+  margin-right: 20px;
+}
+.dashboard-nav__btn {
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 10px 12px;
+  border-radius: var(--radius-s);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.dashboard-nav__btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.dashboard-nav__btn.is-active {
+  background: var(--accent-grad-soft);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Ukuran KONTEN tetap (tidak berubah antar menu) — lebar & tinggi fixed
+   di desktop, hanya isinya yang scroll kalau kepanjangan. */
+.dashboard-content {
+  width: 100%;
+  max-width: 560px;
+  height: 560px;
+  overflow-y: auto;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  padding: 26px 24px;
+}
+
+.tab-title {
+  margin: 0 0 18px;
+  font-size: 18px;
+}
+.tab-subtitle {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+.hint-inline {
+  color: var(--text-faint);
+  font-weight: 400;
+  font-size: 11.5px;
+}
+.settings-divider {
+  height: 1px;
+  background: var(--border-soft);
+  margin: 22px 0;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.setting-row__label {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.segmented {
+  display: flex;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.segmented__btn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 7px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.segmented__btn.is-active {
+  background: var(--accent-grad);
+  color: #0a0d13;
+  font-weight: 600;
+}
+
+.switch {
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  position: relative;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+.switch[aria-checked="true"] {
+  background: var(--accent-grad-soft);
+  border-color: transparent;
+}
+.switch__thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.switch[aria-checked="true"] .switch__thumb {
+  transform: translateX(16px);
+  background: var(--accent-teal);
+}
+
+.user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-s);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+}
+.user-row__name {
+  font-size: 13px;
+  font-weight: 600;
+}
+.user-row__sub {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #0a0d13;
+  background: var(--accent-grad);
+  padding: 1px 7px;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.contact-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 13px;
+}
+.contact-item__label {
+  color: var(--text-secondary);
+}
+.contact-item__value {
+  color: var(--text-faint);
+}
+
+/* ============================== Responsif ==============================
+   Breakpoint 480px mencakup lebar layar umum, termasuk Realme 5 Pro
+   (~393-412 CSS px) dan iPhone 12 (390 CSS px) dalam mode potret. */
+@media (max-width: 480px) {
+  .dashboard-shell {
+    padding: 14px 10px;
+  }
+  .dashboard-shell {
+    flex-direction: column;
+  }
+  .dashboard-nav {
+    flex-direction: row;
+    width: 100%;
+    margin-right: 0;
+    margin-bottom: 12px;
+    overflow-x: auto;
+    gap: 4px;
+  }
+  .dashboard-nav__btn {
+    white-space: nowrap;
+  }
+  .dashboard-content {
+    max-width: 100%;
+    /* di layar kecil, tinggi tetap tapi disesuaikan agar tidak
+       memaksa scroll ganda dengan halaman induk */
+    height: calc(100dvh - 210px);
+    min-height: 380px;
+    padding: 20px 16px;
+  }
+  .setting-row {
+    flex-wrap: wrap;
+  }
+}
+
+/* ---- Password input dengan toggle show/hide ---- */
+.password-field {
+  position: relative;
+}
+.password-field input {
+  width: 100%;
+  padding-right: 40px; /* ruang untuk tombol mata, teks tidak tertutup */
+}
+.password-field__toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+.password-field__toggle:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}

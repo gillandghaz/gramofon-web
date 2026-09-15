@@ -8,6 +8,7 @@ import { auth, googleProvider } from "@/lib/firebase";
 import { validatePassword, validateUsername, validateEmail } from "@/lib/validators";
 import { createUserProfile, isUsernameAvailable, ensureUserProfile } from "@/lib/profile";
 import { isRegistrationOpen } from "@/lib/settings";
+import PasswordInput from "@/components/PasswordInput";
 
 function friendlyAuthError(code) {
   switch (code) {
@@ -196,9 +197,8 @@ export default function RegisterPage() {
 
           <div className="field">
             <label htmlFor="password">Password</label>
-            <input
+            <PasswordInput
               id="password"
-              type="password"
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -218,9 +218,8 @@ export default function RegisterPage() {
 
           <div className="field">
             <label htmlFor="confirmPassword">Konfirmasi password</label>
-            <input
+            <PasswordInput
               id="confirmPassword"
-              type="password"
               autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}

@@ -6,6 +6,3 @@ out/
 .env*.local
 *.log
 .DS_Store
-
-__pycache__/
-*.db

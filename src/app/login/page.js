@@ -10,6 +10,7 @@ import {
 } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
 import { ensureUserProfile } from "@/lib/profile";
+import PasswordInput from "@/components/PasswordInput";
 
 // Pesan error Firebase asli sering berbahasa Inggris & teknis (mis.
 // "auth/invalid-credential") — kita terjemahkan ke pesan yang aman dan
@@ -136,9 +137,8 @@ export default function LoginPage() {
           </div>
           <div className="field">
             <label htmlFor="password">Password</label>
-            <input
+            <PasswordInput
               id="password"
-              type="password"
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
