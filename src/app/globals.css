@@ -1,0 +1,180 @@
+:root {
+  --bg-deep: #0a0d13;
+  --bg-surface: #11151e;
+  --bg-elevated: #171c28;
+  --bg-hover: #1d2433;
+  --border: #242c3b;
+  --border-soft: #1b2130;
+
+  --text-primary: #e9ecf3;
+  --text-secondary: #8a93a8;
+  --text-faint: #5c6478;
+
+  --accent-teal: #33d9c4;
+  --accent-violet: #9b7cf6;
+  --accent-grad: linear-gradient(128deg, var(--accent-teal) 0%, var(--accent-violet) 100%);
+  --accent-grad-soft: linear-gradient(
+    128deg,
+    rgba(51, 217, 196, 0.16) 0%,
+    rgba(155, 124, 246, 0.16) 100%
+  );
+
+  --danger: #e8637a;
+  --radius-s: 6px;
+  --radius-m: 10px;
+  --radius-l: 16px;
+  --shadow-elevated: 0 12px 32px rgba(0, 0, 0, 0.45);
+
+  --font-ui: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  /* min 320px-safe; teruji nyaman untuk layar 6"-6.7" seperti Realme 5 Pro / iPhone 12 */
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input {
+  font-family: inherit;
+}
+
+.btn {
+  border: none;
+  border-radius: var(--radius-s);
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s ease, background 0.15s ease;
+}
+.btn--primary {
+  background: var(--accent-grad);
+  color: #0a0d13;
+}
+.btn--primary:hover {
+  filter: brightness(1.08);
+}
+.btn--primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: none;
+}
+.btn--ghost {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.btn--ghost:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+.btn--block {
+  width: 100%;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.field label {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+.field input {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  color: var(--text-primary);
+  padding: 11px 13px;
+  font-size: 14px;
+}
+.field input:focus {
+  outline: 2px solid var(--accent-teal);
+  outline-offset: 1px;
+}
+
+.error-text {
+  color: var(--danger);
+  font-size: 12.5px;
+  margin: -6px 0 12px;
+}
+.hint-text {
+  color: var(--text-faint);
+  font-size: 11.5px;
+  margin-top: -2px;
+}
+
+.auth-shell {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+}
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  padding: 28px 24px;
+  box-shadow: var(--shadow-elevated);
+}
+.auth-card h1 {
+  font-size: 19px;
+  margin: 0 0 4px;
+}
+.auth-card p.sub {
+  color: var(--text-faint);
+  font-size: 13px;
+  margin: 0 0 20px;
+}
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0;
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-soft);
+}
+.auth-switch {
+  margin-top: 18px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.auth-switch a {
+  color: var(--accent-teal);
+  font-weight: 600;
+  text-decoration: none;
+}
+.google-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}

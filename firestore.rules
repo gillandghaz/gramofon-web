@@ -1,0 +1,69 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+
+    // ---- users/{userId} : profil publik (email, displayName, username, role)
+    match /users/{userId} {
+      allow read: if isSignedIn();
+
+      // User boleh membuat profilnya sendiri sekali (saat register), dan
+      // WAJIB langsung berstatus role:"user" — tidak boleh membuat dirinya
+      // sendiri langsung jadi admin saat mendaftar.
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.role == "user";
+
+      // User biasa boleh update profilnya sendiri, TAPI TIDAK PERNAH boleh
+      // menyentuh field "role" miliknya sendiri (mencegah self-promotion).
+      allow update: if isSignedIn()
+        && request.auth.uid == userId
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']);
+
+      // Hanya admin yang boleh mengubah field "role" milik akun LAIN.
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']);
+
+      allow delete: if false; // hapus akun ditangani lewat Firebase Auth, bukan langsung hapus dokumen
+    }
+
+    // ---- usernames/{username} : dipakai untuk menjamin keunikan username.
+    // Dibaca publik (termasuk saat calon user belum login, untuk cek
+    // ketersediaan sebelum daftar). Hanya pemilik uid yang cocok yang boleh
+    // membuatnya, dan hanya sekali (tidak bisa dibuat ulang / direbut).
+    match /usernames/{username} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // ---- settings/app : status buka/tutup pendaftaran, dibaca publik
+    // (dicek di halaman Register sebelum orang login), ditulis hanya admin.
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ---- media/{mediaId} : entri video/musik (Fase 5).
+    // Semua user login boleh baca; hanya admin yang boleh tambah/hapus,
+    // sesuai permintaan "menu Titles" dikelola admin/pengelola.
+    match /media/{mediaId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Default: tolak semua yang tidak cocok aturan di atas.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
