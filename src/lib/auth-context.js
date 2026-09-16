@@ -9,6 +9,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "./firebase";
+import { ensureUserProfile } from "./profile";
 
 const AuthContext = createContext({
   user: null,
@@ -36,11 +37,34 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     if (!user) return;
+    let healed = false;
     // Dengarkan dokumen profil user secara realtime (termasuk field role) —
     // jadi kalau admin lain mengubah role Anda, UI ikut update tanpa reload.
     const unsubProfile = onSnapshot(doc(db, "users", user.uid), (snap) => {
-      setProfile(snap.exists() ? snap.data() : null);
+      const data = snap.exists() ? snap.data() : null;
+
+      // Self-healing: kalau akun Auth ada tapi profil Firestore-nya TIDAK
+      // ADA (mis. sebelumnya penulisan profil sempat gagal separuh jalan
+      // karena race condition saat signup), buatkan otomatis di sini —
+      // supaya akun ini tidak selamanya "hilang" dari daftar Admin.
+      // onSnapshot lalu otomatis terpanggil ulang setelah profil terbuat.
+      if (!data && !healed) {
+        healed = true;
+        ensureUserProfile(user).catch((err) =>
+          console.error("Gagal self-heal profil:", err)
+        );
+      }
+
+      setProfile(data);
       setLoading(false);
+      // Terapkan preferensi "kurangi animasi" secara site-wide, bukan
+      // hanya saat sedang berada di tab Setting.
+      if (typeof document !== "undefined") {
+        document.documentElement.setAttribute(
+          "data-reduce-motion",
+          String(!!data?.settings?.reduceMotion)
+        );
+      }
     });
     return () => unsubProfile();
   }, [user]);

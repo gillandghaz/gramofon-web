@@ -1,10 +1,10 @@
-# Gramofon Web — Fase 2 (Landing, Login, Register)
+# Gramofon Web
 
-Ini adalah skeleton awal aplikasi Next.js untuk Gramofon versi online.
-Fitur yang sudah jalan di fase ini: landing page, login (Email+Password &
-Google), register (dengan validasi password, username unik, dan cek status
-buka/tutup pendaftaran). Dashboard, ganti password, menu Admin, dan
-manajemen media akan menyusul di fase berikutnya.
+Aplikasi Next.js untuk Gramofon versi online. Fitur yang sudah berjalan:
+landing page, login (Email+Password & Google, dengan show/hide password),
+register (validasi password, username unik, cek buka/tutup pendaftaran),
+dan Dashboard (Account — termasuk foto profil, Setting, Admin, Kontak).
+Manajemen media (Fase 5) menyusul.
 
 ## 1. Selesaikan Firebase dulu (kalau belum)
 
@@ -94,3 +94,33 @@ nilai yang sama seperti di `.env.local` Anda (enam baris
 `gramofon-web.vercel.app`) ke **Firebase Console → Authentication →
 Settings → Authorized domains** — kalau tidak, tombol "Masuk dengan
 Google" akan gagal di production meskipun jalan normal di localhost.
+
+## 9. Fitur admin "Hapus Akun" — Service Account (opsional tapi disarankan)
+
+Fitur Admin → "Hapus Akun" pada dashboard butuh Firebase Admin SDK
+(server-side) supaya bisa benar-benar menghapus akun Firebase
+Authentication milik user lain (bukan cuma profilnya). Kalau langkah ini
+dilewati, fitur lain tetap jalan normal, hanya tombol "Hapus Akun" di
+Admin yang akan gagal dengan pesan error.
+
+1. Firebase Console → ikon gerigi ⚙️ → **Project settings** → tab
+   **Service accounts**.
+2. Klik **Generate new private key** → unduh file `.json`. **Simpan
+   baik-baik, JANGAN pernah di-commit/upload ke GitHub.**
+3. Dari file itu, ambil 3 nilai dan masukkan ke `.env.local` (lokal) DAN
+   ke Environment Variables di Vercel (production):
+   ```
+   FIREBASE_ADMIN_PROJECT_ID=<project_id>
+   FIREBASE_ADMIN_CLIENT_EMAIL=<client_email>
+   FIREBASE_ADMIN_PRIVATE_KEY=<private_key, apa adanya termasuk \n>
+   ```
+   Tiga variabel ini **TIDAK** pakai prefix `NEXT_PUBLIC_` — sengaja,
+   supaya nilainya tidak pernah terkirim ke browser.
+4. Redeploy di Vercel setelah menambahkan env var (Vercel tidak otomatis
+   membaca env var baru untuk deployment yang sudah berjalan).
+
+**Catatan soal foto profil:** foto profil disimpan langsung sebagai
+base64 di dokumen Firestore user (bukan Firebase Storage) — jadi tidak
+butuh setup tambahan apa pun, dan tetap di paket gratis (Spark). Ini
+sengaja dipilih karena sejak Februari 2026 Firebase Storage mewajibkan
+paket berbayar (Blaze) untuk semua project, termasuk yang baru.

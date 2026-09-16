@@ -1,8 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { updateDisplayName, requestPasswordChange } from "@/lib/account";
+import { uploadProfilePhoto } from "@/lib/photo";
+
+function initialsFor(name) {
+  const trimmed = (name || "").trim();
+  return trimmed ? trimmed[0].toUpperCase() : "G";
+}
 
 export default function AccountTab() {
   const { user, profile } = useAuth();
@@ -11,6 +17,9 @@ export default function AccountTab() {
   const [nameMsg, setNameMsg] = useState("");
   const [pwBusy, setPwBusy] = useState(false);
   const [pwMsg, setPwMsg] = useState("");
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoErr, setPhotoErr] = useState("");
+  const fileInputRef = useRef(null);
 
   async function handleSaveName(e) {
     e.preventDefault();
@@ -41,9 +50,64 @@ export default function AccountTab() {
     }
   }
 
+  async function handlePhotoChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoErr("");
+    setPhotoBusy(true);
+    try {
+      await uploadProfilePhoto(user.uid, file);
+    } catch (err) {
+      console.error("Upload foto profil gagal:", err);
+      if (err.message === "not-an-image") setPhotoErr("File harus berupa gambar.");
+      else if (err.message === "too-large") setPhotoErr("Ukuran file maksimal 8MB.");
+      else if (err.message === "still-too-large")
+        setPhotoErr("Gambar masih terlalu besar setelah diperkecil. Coba foto lain.");
+      else if (err.code === "permission-denied")
+        setPhotoErr("Ditolak Firestore Security Rules — pastikan rules terbaru sudah dipasang.");
+      else setPhotoErr(`Gagal mengunggah foto (${err.code || err.message || "unknown"}).`);
+    } finally {
+      setPhotoBusy(false);
+      e.target.value = "";
+    }
+  }
+
   return (
     <div>
       <h2 className="tab-title">Account</h2>
+
+      <div className="avatar-row">
+        <button
+          type="button"
+          className="avatar-btn"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={photoBusy}
+          title="Ganti foto profil"
+        >
+          {profile?.photoURL ? (
+            <img src={profile.photoURL} alt="" />
+          ) : (
+            <span className="avatar-btn__initial">
+              {initialsFor(profile?.displayName || user.email)}
+            </span>
+          )}
+          <span className="avatar-btn__overlay">{photoBusy ? "..." : "Ganti"}</span>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={handlePhotoChange}
+        />
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Foto profil</div>
+          <p className="hint-text">JPG/PNG, otomatis diperkecil, maks 8MB.</p>
+          {photoErr && <p className="error-text" style={{ margin: 0 }}>{photoErr}</p>}
+        </div>
+      </div>
+
+      <div className="settings-divider" />
 
       <div className="field">
         <label>Email</label>
@@ -52,7 +116,7 @@ export default function AccountTab() {
 
       <div className="field">
         <label>
-          Username <span className="hint-inline">(permanen, tidak bisa diubah)</span>
+          Username <span className="hint-inline">(permanen, hanya admin yang bisa mengubah)</span>
         </label>
         <input value={profile?.username ? `@${profile.username}` : ""} disabled />
       </div>

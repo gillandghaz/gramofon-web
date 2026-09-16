@@ -17,3 +17,17 @@ export async function isRegistrationOpen() {
 export async function setRegistrationOpen(open) {
   await setDoc(SETTINGS_DOC, { registrationOpen: open }, { merge: true });
 }
+
+// Saklar admin: izinkan/nonaktifkan sementara fitur "Hapus Akun Saya" di
+// Setting. Default TRUE (diizinkan) kalau belum pernah di-set. Ditegakkan
+// juga di firestore.rules (bukan cuma disembunyikan di UI) — lihat fungsi
+// selfDeleteAllowed() di sana.
+export async function isSelfDeleteEnabled() {
+  const snap = await getDoc(SETTINGS_DOC);
+  if (!snap.exists()) return true;
+  return snap.data().selfDeleteEnabled !== false;
+}
+
+export async function setSelfDeleteEnabled(enabled) {
+  await setDoc(SETTINGS_DOC, { selfDeleteEnabled: enabled }, { merge: true });
+}

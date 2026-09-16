@@ -43,7 +43,7 @@ export default function RegisterPage() {
   }, []);
 
   const pwCheck = validatePassword(password);
-  const userCheck = username ? validateUsername(username) : { valid: true, errors: [] };
+  const userCheck = validateUsername(username);
 
   async function handleRegister(e) {
     e.preventDefault();
@@ -80,12 +80,18 @@ export default function RegisterPage() {
         email.trim(),
         password
       );
+      // Force-refresh token sebelum menulis ke Firestore — tanpa ini,
+      // pernah ada kasus di mana penulisan profil langsung setelah
+      // signup gagal karena SDK Firestore belum sepenuhnya "mengenali"
+      // token akun yang baru saja dibuat (race condition singkat).
+      await cred.user.getIdToken(true);
       await createUserProfile(cred.user, {
         username,
         displayName: displayName.trim() || username,
       });
       router.push("/dashboard");
     } catch (err) {
+      console.error("Register error:", err);
       if (err.message === "username-taken") {
         setError("Username baru saja diambil orang lain. Coba yang lain.");
       } else {

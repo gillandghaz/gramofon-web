@@ -6,6 +6,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import RequireAuth from "@/components/RequireAuth";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import AccountTab from "@/components/tabs/AccountTab";
 import SettingTab from "@/components/tabs/SettingTab";
 import AdminTab from "@/components/tabs/AdminTab";
@@ -30,11 +31,14 @@ function DashboardInner() {
   const router = useRouter();
   const { isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState("account");
+  const [confirmingLogout, setConfirmingLogout] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   // Urutan menu sesuai permintaan: Account, Setting, (Admin kalau admin), Kontak.
   const tabs = isAdmin ? [...BASE_TABS, ADMIN_TAB, KONTAK_TAB] : [...BASE_TABS, KONTAK_TAB];
 
   async function handleLogout() {
+    setLoggingOut(true);
     await signOut(auth);
     router.push("/login");
   }
@@ -43,7 +47,11 @@ function DashboardInner() {
     <div className="dashboard-page">
       <header className="dashboard-topbar">
         <span className="dashboard-brand">🎧 Gramofon</span>
-        <button className="btn btn--ghost btn--sm" onClick={handleLogout}>
+        <button
+          className="btn btn--danger btn--sm logout-btn"
+          onClick={() => setConfirmingLogout(true)}
+        >
+          <LogoutIcon />
           Logout
         </button>
       </header>
@@ -73,6 +81,31 @@ function DashboardInner() {
           {activeTab === "kontak" && <KontakTab />}
         </main>
       </div>
+
+      <ConfirmDialog
+        open={confirmingLogout}
+        title="Keluar dari akun?"
+        message="Anda perlu login kembali untuk mengakses dashboard setelah logout."
+        confirmLabel="Ya, Logout"
+        danger
+        busy={loggingOut}
+        onCancel={() => setConfirmingLogout(false)}
+        onConfirm={handleLogout}
+      />
     </div>
+  );
+}
+
+function LogoutIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <path
+        d="M6 2H3.5A1.5 1.5 0 0 0 2 3.5v9A1.5 1.5 0 0 0 3.5 14H6M10.5 11l3-3-3-3M13.2 8H6"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

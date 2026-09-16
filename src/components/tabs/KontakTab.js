@@ -10,7 +10,14 @@ export default function KontakTab() {
 
       <div className="contact-item">
         <span className="contact-item__label">GitHub</span>
-        <span className="contact-item__value">Kontak menyusul</span>
+        <a
+          className="contact-item__value contact-item__link"
+          href="https://github.com/gillandghaz"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          github.com/gillandghaz
+        </a>
       </div>
       <div className="contact-item">
         <span className="contact-item__label">Email</span>

@@ -1,10 +1,26 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 
 export default function LandingPage() {
   const { user, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && user) {
+      router.replace("/dashboard");
+    }
+  }, [loading, user, router]);
+
+  // Selagi masih mengecek status login, atau kalau ternyata sudah login
+  // (dan sedang menuju /dashboard), jangan tampilkan landing page sama
+  // sekali — hindari "kedip" konten landing sebelum redirect.
+  if (loading || user) {
+    return <div style={{ minHeight: "100dvh" }} />;
+  }
 
   return (
     <main

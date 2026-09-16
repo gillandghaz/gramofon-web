@@ -426,6 +426,39 @@ input {
   .setting-row {
     flex-wrap: wrap;
   }
+
+  /* ---- Admin: "Kelola pengguna" jangan sampai meluber/tertimpa di HP ---- */
+  .admin-users-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .admin-search {
+    max-width: none; /* penuh selebar kontainer di HP */
+  }
+  .user-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .user-row__info {
+    flex-basis: auto;
+  }
+  .user-row__actions {
+    width: 100%;
+  }
+  .btn--fixed {
+    /* di HP, lebar tetap 118px tidak lagi dipaksakan (supaya tidak
+       meluber ke luar kartu) — tiga tombol berbagi lebar SAMA RATA,
+       jadi tetap tidak berubah ukuran hanya karena teks label berubah. */
+    width: auto;
+    flex: 1 1 0;
+    min-width: 0;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+  .avatar-btn {
+    width: 64px;
+    height: 64px;
+  }
 }
 
 /* ---- Password input dengan toggle show/hide ---- */
@@ -455,4 +488,205 @@ input {
 .password-field__toggle:hover {
   color: var(--text-primary);
   background: var(--bg-hover);
+}
+
+/* ---- btn--danger (dipakai Logout & aksi berbahaya lain) ---- */
+.btn--danger {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid rgba(232, 99, 122, 0.4);
+}
+.btn--danger:hover {
+  background: rgba(232, 99, 122, 0.14);
+  border-color: var(--danger);
+}
+.btn--sm {
+  padding: 7px 13px;
+  font-size: 12px;
+}
+
+/* ---- Confirm dialog ---- */
+.confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 8, 12, 0.65);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  padding: 16px;
+}
+.confirm-card {
+  width: 100%;
+  max-width: 340px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  padding: 22px 20px;
+  box-shadow: var(--shadow-elevated);
+}
+.confirm-card h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+.confirm-card p {
+  margin: 0 0 18px;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ---- Logout button - dibuat lebih menonjol ---- */
+.logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 600;
+}
+
+/* ---- Avatar / foto profil ---- */
+.avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+.avatar-btn {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--accent-grad);
+}
+.avatar-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.avatar-btn__initial {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 700;
+  color: #0a0d13;
+  line-height: 1;
+}
+/* Overlay "Ganti" HANYA muncul saat hover/focus — baik saat ada foto
+   maupun saat masih huruf inisial — supaya tidak pernah menimpa/tumpuk
+   dengan huruf inisial secara permanen (itu yang bikin "berantakan"). */
+.avatar-btn__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 13, 19, 0.55);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.avatar-btn:hover .avatar-btn__overlay,
+.avatar-btn:focus-visible .avatar-btn__overlay {
+  opacity: 1;
+}
+/* Di layar sentuh tidak ada "hover" — tampilkan overlay tipis-tipis
+   terus supaya pengguna tetap tahu area ini bisa diketuk. */
+@media (hover: none) {
+  .avatar-btn__overlay {
+    opacity: 0.85;
+    background: rgba(10, 13, 19, 0.35);
+    font-size: 9.5px;
+  }
+}
+
+/* ---- Kurangi animasi (dari Setting) ---- */
+html[data-reduce-motion="true"] * {
+  animation-duration: 0.001ms !important;
+  transition-duration: 0.001ms !important;
+}
+
+.danger-zone__confirm {
+  background: rgba(232, 99, 122, 0.06);
+  border: 1px solid rgba(232, 99, 122, 0.25);
+  border-radius: var(--radius-s);
+  padding: 14px;
+}
+
+/* ---- Admin tab: search & aksi per baris user ---- */
+.admin-users-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.admin-search {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  color: var(--text-primary);
+  padding: 9px 13px;
+  font-size: 13px;
+  width: 100%;
+  max-width: 280px;
+  min-width: 220px;
+}
+.user-row {
+  flex-wrap: wrap;
+}
+.user-row__info {
+  min-width: 0;
+  flex: 1 1 160px;
+  overflow: hidden;
+}
+.user-row__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.user-row__sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-row__actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+/* Lebar tombol aksi DITETAPKAN (bukan menyesuaikan panjang teks) supaya
+   tombol tidak "memendek/memanjang" saat labelnya berubah, mis. dari
+   "Jadikan Admin" (panjang) ke "Cabut Admin" (pendek). */
+.btn--fixed {
+  width: 118px;
+  text-align: center;
+}
+.badge--self {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+.contact-item__link {
+  color: var(--accent-teal);
+  text-decoration: none;
+  font-weight: 600;
+}
+.contact-item__link:hover {
+  text-decoration: underline;
 }
