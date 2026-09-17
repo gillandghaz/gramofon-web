@@ -40,12 +40,10 @@ export async function POST(request) {
       return NextResponse.json({ error: "User tidak ditemukan." }, { status: 404 });
     }
     const targetData = targetSnap.data();
-    if (targetData.role === "admin") {
-      return NextResponse.json(
-        { error: "Tidak bisa menghapus akun admin lain lewat sini." },
-        { status: 400 }
-      );
-    }
+    // Catatan: larangan "tidak bisa menghapus akun admin lain" sudah
+    // dicabut sesuai permintaan — admin sekarang boleh menghapus akun
+    // admin lain juga. Larangan menghapus DIRI SENDIRI lewat jalur ini
+    // (di atas) tetap dipertahankan dengan sengaja.
 
     // Hapus profil Firestore + reservasi username, lalu hapus akun Auth-nya.
     if (targetData.username) {

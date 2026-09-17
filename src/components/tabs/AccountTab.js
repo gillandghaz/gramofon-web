@@ -79,7 +79,7 @@ export default function AccountTab() {
       <div className="avatar-row">
         <button
           type="button"
-          className="avatar-btn"
+          className={"avatar-btn" + (profile?.photoURL ? " avatar-btn--has-photo" : "")}
           onClick={() => fileInputRef.current?.click()}
           disabled={photoBusy}
           title="Ganti foto profil"
@@ -148,6 +148,9 @@ export default function AccountTab() {
         {pwBusy ? "Mengirim..." : "Kirim link ganti password ke email"}
       </button>
       {pwMsg && <p className="hint-text" style={{ marginTop: 10 }}>{pwMsg}</p>}
+      <p className="hint-text" style={{ marginTop: 14 }}>
+        Untuk keluar dari akun, klik foto profil Anda di pojok kanan atas.
+      </p>
     </div>
   );
 }

@@ -42,6 +42,35 @@ body {
   /* min 320px-safe; teruji nyaman untuk layar 6"-6.7" seperti Realme 5 Pro / iPhone 12 */
   font-size: 15px;
   -webkit-font-smoothing: antialiased;
+  /* Scrollbar Firefox: tipis & tanpa tombol panah (Firefox tidak
+     mendukung ::-webkit-scrollbar-button sama sekali -- ini yang
+     ternyata menyebabkan kotak panah atas-bawah terlihat di Windows,
+     karena sebelumnya file ini belum punya styling scrollbar apa pun). */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* Scrollbar Chrome/Edge/Safari -- ditata ulang total, termasuk
+   menyembunyikan tombol panah atas/bawah yang muncul di beberapa
+   konfigurasi Windows kalau tidak di-override secara eksplisit. */
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+}
+*::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 a {
@@ -97,17 +126,74 @@ input {
   font-size: 12.5px;
   color: var(--text-secondary);
 }
-.field input {
+.field input,
+.field textarea {
+  width: 100%;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-s);
   color: var(--text-primary);
   padding: 11px 13px;
   font-size: 14px;
+  font-family: inherit;
 }
-.field input:focus {
+.field textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+.field input:focus,
+.field textarea:focus {
   outline: 2px solid var(--accent-teal);
   outline-offset: 1px;
+}
+
+/* Hilangkan panah naik/turun bawaan browser di semua input angka —
+   sebelumnya muncul "liar" (tidak disengaja) di field kuota penyimpanan
+   dan bikin tampilan terasa belum jadi/seperti HTML polos. */
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+/* Semua <select> di aplikasi ini memakai tampilan kustom yang sama
+   (bukan panah bawaan OS/browser yang bikin terasa belum jadi) — panah
+   digambar sendiri lewat background SVG di kanan, elemen aslinya dibuat
+   transparan (appearance:none) supaya warna/border ikut tema gelap. */
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-color: var(--bg-surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238A93A8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  color: var(--text-primary);
+  padding: 9px 32px 9px 12px;
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+}
+select:focus {
+  outline: 2px solid var(--accent-teal);
+  outline-offset: 1px;
+}
+select:hover {
+  border-color: var(--accent-teal);
+}
+/* Opsi di dalam dropdown-nya sendiri tetap dirender oleh OS/browser
+   (tidak bisa di-custom penuh lintas browser) -- ini batasan wajar HTML
+   <select>, bukan bug. Warnanya tetap diset supaya tidak putih polos. */
+select option {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
 }
 
 .error-text {
@@ -288,6 +374,12 @@ input {
   font-size: 13px;
   font-weight: 500;
 }
+.setting-row__label p {
+  /* jarak judul-ke-keterangan yang nyaman & konsisten di semua ukuran
+     layar (nilai tetap kecil ini sengaja TIDAK dibuat berbeda per
+     breakpoint -- 6px sudah nyaman baik di desktop maupun HP) */
+  margin: 6px 0 0;
+}
 
 .segmented {
   display: flex;
@@ -349,24 +441,6 @@ input {
   flex-direction: column;
   gap: 8px;
 }
-.user-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: var(--radius-s);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-soft);
-}
-.user-row__name {
-  font-size: 13px;
-  font-weight: 600;
-}
-.user-row__sub {
-  font-size: 11.5px;
-  color: var(--text-faint);
-}
 .badge {
   display: inline-block;
   margin-left: 6px;
@@ -392,73 +466,6 @@ input {
 }
 .contact-item__value {
   color: var(--text-faint);
-}
-
-/* ============================== Responsif ==============================
-   Breakpoint 480px mencakup lebar layar umum, termasuk Realme 5 Pro
-   (~393-412 CSS px) dan iPhone 12 (390 CSS px) dalam mode potret. */
-@media (max-width: 480px) {
-  .dashboard-shell {
-    padding: 14px 10px;
-  }
-  .dashboard-shell {
-    flex-direction: column;
-  }
-  .dashboard-nav {
-    flex-direction: row;
-    width: 100%;
-    margin-right: 0;
-    margin-bottom: 12px;
-    overflow-x: auto;
-    gap: 4px;
-  }
-  .dashboard-nav__btn {
-    white-space: nowrap;
-  }
-  .dashboard-content {
-    max-width: 100%;
-    /* di layar kecil, tinggi tetap tapi disesuaikan agar tidak
-       memaksa scroll ganda dengan halaman induk */
-    height: calc(100dvh - 210px);
-    min-height: 380px;
-    padding: 20px 16px;
-  }
-  .setting-row {
-    flex-wrap: wrap;
-  }
-
-  /* ---- Admin: "Kelola pengguna" jangan sampai meluber/tertimpa di HP ---- */
-  .admin-users-head {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .admin-search {
-    max-width: none; /* penuh selebar kontainer di HP */
-  }
-  .user-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .user-row__info {
-    flex-basis: auto;
-  }
-  .user-row__actions {
-    width: 100%;
-  }
-  .btn--fixed {
-    /* di HP, lebar tetap 118px tidak lagi dipaksakan (supaya tidak
-       meluber ke luar kartu) — tiga tombol berbagi lebar SAMA RATA,
-       jadi tetap tidak berubah ukuran hanya karena teks label berubah. */
-    width: auto;
-    flex: 1 1 0;
-    min-width: 0;
-    padding-left: 4px;
-    padding-right: 4px;
-  }
-  .avatar-btn {
-    width: 64px;
-    height: 64px;
-  }
 }
 
 /* ---- Password input dengan toggle show/hide ---- */
@@ -609,7 +616,14 @@ input {
 /* Di layar sentuh tidak ada "hover" — tampilkan overlay tipis-tipis
    terus supaya pengguna tetap tahu area ini bisa diketuk. */
 @media (hover: none) {
-  .avatar-btn__overlay {
+  /* :not(.avatar-btn--has-photo) -- di perangkat sentuh tidak ada "hover"
+     asli, jadi overlay+tulisan "Ganti" HANYA ditampilkan permanen-tipis
+     saat BELUM ada foto (mengundang user untuk upload). Begitu sudah ada
+     foto, overlay tetap opacity:0 seperti sedia kala (aturan :hover di
+     atas tidak pernah terpicu di layar sentuh, jadi otomatis tidak pernah
+     tampil) -- ini yang memperbaiki bug arsiran hitam + "Ganti" yang
+     sebelumnya selalu menimpa foto profil di Android/iPhone. */
+  .avatar-btn:not(.avatar-btn--has-photo) .avatar-btn__overlay {
     opacity: 0.85;
     background: rgba(10, 13, 19, 0.35);
     font-size: 9.5px;
@@ -649,33 +663,63 @@ html[data-reduce-motion="true"] * {
   max-width: 280px;
   min-width: 220px;
 }
+/* Kartu per-baris user/media — sebelumnya sempat hilang styling
+   dasarnya (background/border/padding) di satu revisi, itu penyebab
+   tampilan "polos seperti HTML" & antar-user tidak terpisah jelas. */
 .user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   flex-wrap: wrap;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-m);
+  padding: 12px 14px;
+  transition: border-color 0.15s ease;
+}
+.user-row:hover {
+  border-color: var(--border);
 }
 .user-row__info {
   min-width: 0;
-  flex: 1 1 160px;
+  flex: 1 1 200px;
   overflow: hidden;
 }
 .user-row__name {
+  /* String panjang (nama tampilan) dipotong dengan "..." -- tidak
+     pernah keluar dari kotaknya. */
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 .user-row__sub {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
 }
 .user-row__actions {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  /* SEBELUMNYA flex-shrink:0 di sini -- itu memaksa 4 tombol tetap minta
+     lebar penuh (~490px) walau ruang yang tersedia lebih sempit (mis.
+     jendela browser tidak selebar 560px), sehingga tombol "keluar"
+     dari kartunya. Dihapus supaya baris tombol boleh menyempit/melipat
+     mengikuti ruang yang benar-benar tersedia. */
+  min-width: 0;
 }
 /* Lebar tombol aksi DITETAPKAN (bukan menyesuaikan panjang teks) supaya
    tombol tidak "memendek/memanjang" saat labelnya berubah, mis. dari
-   "Jadikan Admin" (panjang) ke "Cabut Admin" (pendek). */
+   "Jadikan Admin" (panjang) ke "Cabut Admin" (pendek). Dibuat cukup
+   kecil supaya ke-4 tombol muat SATU baris di lebar laptop/PC biasa. */
 .btn--fixed {
-  width: 118px;
+  width: 100px;
+  max-width: 100%;
+  padding: 7px 4px;
+  font-size: 11px;
   text-align: center;
 }
 .badge--self {
@@ -689,4 +733,603 @@ html[data-reduce-motion="true"] * {
 }
 .contact-item__link:hover {
   text-decoration: underline;
+}
+
+/* ==============================================================
+   Responsif — breakpoint 480px mencakup lebar layar umum, termasuk
+   Realme 5 Pro (~393-412 CSS px) dan iPhone 12 (390 CSS px) dalam
+   mode potret. Diletakkan di PALING BAWAH file secara sengaja: ketika
+   dua aturan CSS punya spesifisitas sama, urutan file yang menentukan
+   siapa menang — menaruh blok ini di akhir memastikan override mobile
+   di sini SELALU menang, berapa pun kali sebuah class didefinisikan
+   ulang di atas (termasuk beberapa .user-row-related yang sempat
+   terduplikasi sebelumnya). */
+
+/* ---- Topbar: avatar chip + tombol notifikasi ---- */
+.dashboard-topbar__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.topbar-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
+  background: var(--accent-grad);
+  flex-shrink: 0;
+}
+.topbar-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.topbar-avatar span {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #0a0d13;
+}
+
+.notif-wrap {
+  position: relative;
+}
+.iconbtn-bell {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.iconbtn-bell:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+.notif-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+.notif-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 300px;
+  max-width: calc(100vw - 32px);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-elevated);
+  z-index: 250;
+  overflow: hidden;
+}
+.notif-panel__head {
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-soft);
+}
+.notif-panel__list {
+  max-height: 320px;
+  overflow-y: auto;
+}
+.notif-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-soft);
+  padding: 10px 14px;
+  cursor: pointer;
+}
+.notif-item:hover {
+  background: var(--bg-hover);
+}
+.notif-item:last-child {
+  border-bottom: none;
+}
+.notif-item.is-unread {
+  background: rgba(51, 217, 196, 0.05);
+}
+.notif-item__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+.notif-item__sender {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-teal);
+}
+.notif-item__date {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+.notif-item__title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+.notif-item.is-unread .notif-item__title::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-teal);
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.notif-item__msg {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+/* ---- Kuota penyimpanan (Admin) ---- */
+.quota-form {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-s);
+  padding: 14px;
+  margin-bottom: 8px;
+}
+.quota-form__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.quota-form input[type="number"] {
+  width: 90px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  font-size: 13px;
+}
+.quota-scope {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.quota-scope label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.quota-scope input[type="radio"] {
+  margin-top: 2px;
+}
+.user-row__quota {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 2px;
+}
+
+/* ---- Notifikasi (Admin: compose + kelola) ---- */
+.notif-compose textarea {
+  width: 100%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 70px;
+}
+.notif-manage-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-s);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  margin-bottom: 6px;
+}
+.notif-manage-item__body {
+  min-width: 0;
+}
+.notif-manage-item__title {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.notif-manage-item__msg {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  margin-top: 2px;
+  white-space: pre-wrap;
+}
+
+
+/* ---- Admin: sub-navigasi (Umum/Pengguna/Notifikasi/Media) ---- */
+.admin-subnav {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--border-soft);
+  overflow-x: auto;
+}
+.admin-subnav__btn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 9px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.admin-subnav__btn:hover {
+  color: var(--text-primary);
+}
+.admin-subnav__btn.is-active {
+  color: var(--accent-teal);
+  border-bottom-color: var(--accent-teal);
+}
+
+/* ---- Notifikasi: preview di dropdown dipotong 2 baris, detail penuh
+   dibuka lewat modal terpisah (lihat .notif-detail-backdrop) ---- */
+.notif-item__msg {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ---- Modal detail notifikasi: popup di tengah layar, bisa discroll,
+   dipakai untuk pesan yang panjang ---- */
+.notif-detail-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 8, 12, 0.65);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 320;
+  padding: 20px;
+}
+.notif-detail-card {
+  width: 100%;
+  max-width: 420px;
+  max-height: min(560px, 80vh);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-elevated);
+  overflow: hidden;
+}
+.notif-detail-card__head {
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  flex-shrink: 0;
+}
+.notif-detail-card__sender {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-teal);
+}
+.notif-detail-card__title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 4px 0;
+}
+.notif-detail-card__date {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.notif-detail-card__body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.notif-detail-card__foot {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-soft);
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.notif-manage-item__title,
+.notif-manage-item__msg {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* ---- Media: kontrol tampilan (Semua/Per pengguna) & urutkan ---- */
+.media-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.media-controls select {
+  /* Styling dasarnya sudah diberikan oleh rule "select" global (termasuk
+     panah kustom) — di sini cukup atur lebar minimumnya saja supaya
+     tidak terlalu sempit dan teks opsinya tidak terpotong. */
+  min-width: 190px;
+  flex: 1 1 190px;
+}
+.media-group {
+  margin-bottom: 18px;
+}
+.media-group__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 2px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.media-group__head strong {
+  font-size: 13px;
+}
+
+/* ---- Paginasi (Kelola Pengguna, dst) ---- */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+.pagination__btn {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.pagination__btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.pagination__btn.is-active {
+  background: var(--accent-grad);
+  color: #0a0d13;
+  font-weight: 700;
+  border-color: transparent;
+}
+.pagination__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---- Logout dipindah ke Account (di bawah Ganti Password) ---- */
+.account-logout {
+  margin-top: 4px;
+}
+
+/* ---- Menu dropdown profil (avatar kanan atas) - Settings & Logout,
+   gaya mirip menu akun Google ---- */
+.profile-menu-wrap {
+  position: relative;
+}
+.profile-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 240px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-elevated);
+  z-index: 250;
+  overflow: hidden;
+  padding: 6px;
+}
+.profile-menu__header {
+  padding: 10px 10px 12px;
+}
+.profile-menu__name {
+  font-size: 13.5px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.profile-menu__email {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.profile-menu__divider {
+  height: 1px;
+  background: var(--border-soft);
+  margin: 2px 0 6px;
+}
+.profile-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 9px 10px;
+  border-radius: var(--radius-s);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+.profile-menu__item:hover {
+  background: var(--bg-hover);
+}
+.profile-menu__item--danger {
+  color: var(--danger);
+}
+.profile-menu__item--danger:hover {
+  background: rgba(232, 99, 122, 0.12);
+}
+
+@media (max-width: 480px) {
+  .dashboard-shell {
+    padding: 14px 10px;
+    flex-direction: column;
+  }
+  .dashboard-nav {
+    flex-direction: row;
+    width: 100%;
+    margin-right: 0;
+    margin-bottom: 12px;
+    overflow-x: auto;
+    gap: 4px;
+  }
+  .dashboard-nav__btn {
+    white-space: nowrap;
+  }
+  .dashboard-content {
+    max-width: 100%;
+    height: calc(100dvh - 210px);
+    min-height: 380px;
+    padding: 20px 16px;
+  }
+  .setting-row {
+    flex-wrap: wrap;
+  }
+
+  /* ---- Admin: "Kelola pengguna" ---- */
+  .admin-users-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .admin-search {
+    max-width: none;
+  }
+  .user-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .user-row__info {
+    /* PENTING: netralkan flex-grow & flex-basis:160px dari rule dasar —
+       itu penyebab jarak sangat jauh sebelumnya (di layout kolom,
+       flex-basis:160px terbaca sebagai TINGGI minimum, bukan lebar,
+       karena arah sumbu utama flex berubah dari horizontal ke vertikal). */
+    flex: 0 1 auto;
+  }
+  .user-row__actions {
+    /* Grid 2x2: baris pertama Jadikan Admin + Ubah Username, baris kedua
+       Batas Simpan + Hapus Akun (urutan tombol di JSX memang sudah
+       persis begitu, jadi grid otomatis mengikuti urutan itu). */
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    width: 100%;
+  }
+  .btn--fixed {
+    width: 100%;
+    max-width: none;
+    flex: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+  .avatar-btn {
+    width: 64px;
+    height: 64px;
+  }
+  /* ---- Notifikasi: panel dropdown selebar layar di HP (bukan 300px
+     tetap, supaya tidak nabrak tepi layar sempit) ---- */
+  .notif-panel {
+    position: fixed;
+    top: 62px;
+    right: 10px;
+    left: 10px;
+    width: auto;
+    max-width: none;
+  }
+
+  /* ---- Kuota: baris kontrol & radio menumpuk rapi di layar sempit ---- */
+  .quota-form__row {
+    gap: 8px;
+  }
+  .quota-form__row input[type="number"] {
+    width: 80px;
+  }
+
+  .admin-subnav {
+    gap: 0;
+  }
+  .admin-subnav__btn {
+    padding: 8px 10px;
+    font-size: 11.5px;
+  }
+
+  .media-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .media-controls select {
+    width: 100%;
+  }
+  .notif-detail-card {
+    max-height: 85vh;
+  }
+  .pagination__btn {
+    min-width: 30px;
+    height: 30px;
+    font-size: 11.5px;
+  }
 }

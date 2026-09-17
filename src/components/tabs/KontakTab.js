@@ -3,7 +3,7 @@
 export default function KontakTab() {
   return (
     <div>
-      <h2 className="tab-title">Kontak</h2>
+      <h2 className="tab-title">Contact</h2>
       <p className="hint-text" style={{ marginBottom: 18 }}>
         Informasi kontak pembuat aplikasi ini.
       </p>

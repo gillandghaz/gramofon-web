@@ -124,3 +124,57 @@ base64 di dokumen Firestore user (bukan Firebase Storage) — jadi tidak
 butuh setup tambahan apa pun, dan tetap di paket gratis (Spark). Ini
 sengaja dipilih karena sejak Februari 2026 Firebase Storage mewajibkan
 paket berbayar (Blaze) untuk semua project, termasuk yang baru.
+
+## 10. Setup Cloudinary (untuk upload video/musik pengguna)
+
+Video/musik sungguhan (bisa ratusan MB) tidak mungkin disimpan di
+Firestore (limit 1MB/dokumen) — makanya dipakai Cloudinary, yang punya
+tier gratis TANPA kartu kredit.
+
+**Langkah pendaftaran:**
+1. Buka https://cloudinary.com/users/register/free → daftar pakai email
+   (tidak diminta kartu sama sekali).
+2. Setelah masuk, Anda otomatis punya satu "Product Environment" default.
+   Buka **Dashboard** (halaman utama setelah login).
+3. Di bagian **"Product Environment Credentials"**, catat 3 nilai ini:
+   - **Cloud name**
+   - **API Key**
+   - **API Secret** (klik ikon mata 👁 untuk menampilkannya — perlakukan
+     ini seperti password, JANGAN dibagikan ke siapa pun)
+
+**Masukkan ke Environment Variables** (lokal `.env.local` DAN Vercel):
+```
+CLOUDINARY_CLOUD_NAME=<cloud name Anda>
+CLOUDINARY_API_KEY=<api key Anda>
+CLOUDINARY_API_SECRET=<api secret Anda>
+```
+Ketiganya **server-only** (tanpa prefix `NEXT_PUBLIC_`) — API Secret
+tidak pernah boleh sampai ke browser. Redeploy di Vercel setelah
+menambahkan env var baru.
+
+**Kenapa ini aman (prosedur "signed upload"):** aplikasi TIDAK memakai
+"Upload Preset unsigned" (cara yang lebih gampang tapi rawan
+disalahgunakan orang luar untuk upload sembarangan ke akun Anda). Sebagai
+gantinya:
+1. Browser minta "izin upload" ke server Anda sendiri (`/api/media/sign-upload`) — server mengecek dulu sisa kuota penyimpanan user itu, baru memberi tanda tangan yang **hanya berlaku sekali, untuk folder milik user itu saja**, ditandatangani pakai API Secret yang tidak pernah keluar dari server.
+2. Browser upload langsung ke Cloudinary pakai tanda tangan itu.
+3. Setelah selesai, browser lapor balik ke server Anda
+   (`/api/media/confirm-upload`) — server **mengecek ulang** ukuran
+   asli file (bukan percaya klaim browser) terhadap sisa kuota; kalau
+   ternyata kelebihan, file yang baru saja ter-upload langsung dihapus
+   lagi dari Cloudinary saat itu juga, dan tidak pernah tercatat.
+4. Admin menghapus media (di Admin → Media) juga lewat server
+   (`/api/admin/delete-media`), yang memverifikasi ulang status admin
+   sebelum menghapus asset Cloudinary + datanya di Firestore.
+
+Tidak ada langkah di Cloudinary Dashboard yang perlu diutak-atik lagi
+setelah ini (tidak perlu bikin Upload Preset) — cukup 3 env var di atas.
+
+## 11. Batas realistis paket gratis Cloudinary
+
+Cloudinary Free plan memberi **25 kredit/bulan**, dibagi bersama antara
+penyimpanan + bandwidth (streaming) + transformasi (1 kredit ≈ 1GB).
+Ini BUKAN "25GB penyimpanan yang selalu tersedia" — kalau video sering
+diputar orang, itu juga memakai kredit yang sama. Untuk skala aplikasi
+publik-terbatas ini kemungkinan besar cukup, tapi pantau pemakaian di
+Cloudinary Dashboard secara berkala.

@@ -76,7 +76,7 @@ export default function SettingTab() {
 
   return (
     <div>
-      <h2 className="tab-title">Setting</h2>
+      <h2 className="tab-title">Settings</h2>
 
       <div className="setting-row">
         <div>

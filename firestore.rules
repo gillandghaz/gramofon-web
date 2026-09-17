@@ -13,13 +13,13 @@ service cloud.firestore {
     }
 
     // Saklar admin "Izinkan pengguna hapus akun sendiri" (settings/app).
-    // Default TRUE kalau dokumen/field-nya belum pernah di-set.
     function selfDeleteAllowed() {
       return !exists(/databases/$(database)/documents/settings/app) ||
         get(/databases/$(database)/documents/settings/app).data.selfDeleteEnabled != false;
     }
 
-    // ---- users/{userId} : profil (email, displayName, username, role, photoURL, settings)
+    // ---- users/{userId} : profil (email, displayName, username, role,
+    // photoURL, settings, storageLimitMB, readNotifications)
     match /users/{userId} {
       allow read: if isSignedIn();
 
@@ -27,59 +27,80 @@ service cloud.firestore {
         && request.auth.uid == userId
         && request.resource.data.role == "user";
 
-      // User biasa boleh update profilnya sendiri (nama, foto, settings, dll),
-      // TAPI TIDAK PERNAH boleh menyentuh field "role" ATAU "username"
-      // miliknya sendiri (username hanya boleh diubah admin, lihat di bawah).
+      // User biasa boleh update profilnya sendiri (nama, foto, settings,
+      // readNotifications, dll), TAPI TIDAK PERNAH boleh menyentuh field
+      // "role" ATAU "username" miliknya sendiri.
       allow update: if isSignedIn()
         && request.auth.uid == userId
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'username']);
 
-      // Hanya admin yang boleh mengubah field "role" milik akun LAIN.
+      // Admin boleh mengubah field "role" milik akun mana pun (termasuk
+      // sesama admin — untuk mencabut status admin akun lain).
       allow update: if isAdmin()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']);
 
-      // Hanya admin yang boleh mengubah "username" milik user LAIN, dan
-      // TIDAK BOLEH kalau target-nya sesama admin (proteksi antar-admin).
+      // Admin boleh mengubah "username" milik akun mana pun, TERMASUK
+      // sesama admin (sesuai permintaan terbaru — proteksi antar-admin
+      // yang tadinya ada sudah dicabut).
       allow update: if isAdmin()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username'])
-        && resource.data.role != "admin";
-
-      // Admin boleh mengubah username MILIKNYA SENDIRI juga.
-      allow update: if isAdmin()
-        && request.auth.uid == userId
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['username']);
 
-      // User boleh menghapus profilnya sendiri — TAPI HANYA kalau admin
-      // belum menonaktifkan saklar "Izinkan pengguna hapus akun sendiri".
+      // Admin boleh menetapkan/menghapus batas penyimpanan khusus akun
+      // mana pun (dipakai fitur "Batas Penyimpanan" & reset massal).
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['storageLimitMB']);
+
+      // User boleh menghapus profilnya sendiri — HANYA kalau saklar admin
+      // "Izinkan pengguna hapus akun sendiri" masih menyala.
       allow delete: if isSignedIn() && request.auth.uid == userId && selfDeleteAllowed();
 
-      // Admin boleh menghapus profil user LAIN yang BUKAN admin (dipakai
-      // fitur admin "Hapus Akun" — penghapusan akun Auth-nya sendiri
-      // terjadi di server lewat /api/admin/delete-user).
-      allow delete: if isAdmin() && resource.data.role != "admin";
+      // Admin boleh menghapus profil akun LAIN mana pun (termasuk sesama
+      // admin, sesuai permintaan terbaru) — TAPI TIDAK boleh memakai jalur
+      // ini untuk menghapus akunnya SENDIRI (supaya tidak jadi celah buat
+      // melewati saklar selfDeleteAllowed di atas). Penghapusan akun Auth
+      // sungguhan terjadi di server lewat /api/admin/delete-user.
+      allow delete: if isAdmin() && request.auth.uid != userId;
     }
 
     // ---- usernames/{username} : menjamin keunikan username.
     match /usernames/{username} {
       allow read: if true;
       allow create: if (isSignedIn() && request.resource.data.uid == request.auth.uid) || isAdmin();
-      // Dihapus oleh pemiliknya sendiri (hapus akun sendiri, kalau saklar
-      // admin mengizinkan), atau oleh admin (mengganti/menghapus akun user lain).
       allow delete: if isAdmin() ||
         (isSignedIn() && resource.data.uid == request.auth.uid && selfDeleteAllowed());
       allow update: if false;
     }
 
-    // ---- settings/app : status buka/tutup pendaftaran & saklar hapus-akun-sendiri.
+    // ---- settings/app : status pendaftaran, saklar hapus-akun-sendiri,
+    // dan batas penyimpanan default.
     match /settings/{docId} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // ---- media/{mediaId} : entri video/musik (Fase 5).
+    // ---- notifications/{notifId} : pesan satu-arah admin -> semua user.
+    // Dibaca semua user yang login (broadcast), hanya admin yang boleh
+    // kirim/hapus. Dihapus SUNGGUHAN (bukan soft-delete), makanya tidak
+    // ada "allow update" — begitu dihapus, hilang total tanpa bekas.
+    match /notifications/{notifId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isAdmin();
+      allow update: if false;
+    }
+
+    // ---- media/{mediaId} : entri video/musik milik masing-masing user.
     match /media/{mediaId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isAdmin();
+      // User hanya boleh membuat entri milik dirinya sendiri (uid di
+      // dokumen harus cocok dengan uid yang sedang login). Batas ukuran
+      // (kuota) DITEGAKKAN di server saat meminta tanda tangan upload
+      // Cloudinary (lihat /api/media/sign-upload) — bukan di sini, karena
+      // rules Firestore tidak tahu apa-apa soal Cloudinary.
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      // User boleh hapus entri miliknya sendiri; admin boleh hapus entri
+      // siapa pun (dipakai fitur Admin -> Media).
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+      allow update: if isAdmin();
     }
 
     match /{document=**} {

@@ -4,6 +4,7 @@ import {
   getDocs,
   runTransaction,
   updateDoc,
+  deleteField,
 } from "firebase/firestore";
 import { auth, db } from "./firebase";
 
@@ -32,13 +33,21 @@ export async function setUserRole(uid, role) {
   await updateDoc(doc(db, "users", uid), { role });
 }
 
-// Admin mengganti username user LAIN (bukan admin lain) — ATAU username
-// miliknya SENDIRI (meski dia admin). Memakai transaction supaya
-// "bebaskan username lama" + "rebut username baru" + "update field
-// username" terjadi atomik.
+// Set batas penyimpanan KHUSUS untuk satu akun (override dari default).
+export async function setUserStorageLimit(uid, mb) {
+  await updateDoc(doc(db, "users", uid), { storageLimitMB: mb });
+}
+
+// Kembalikan akun ini ke batas DEFAULT (hapus override-nya).
+export async function clearUserStorageLimit(uid) {
+  await updateDoc(doc(db, "users", uid), { storageLimitMB: deleteField() });
+}
+
+// Admin mengganti username akun MANA PUN, termasuk sesama admin. Memakai
+// transaction supaya "bebaskan username lama" + "rebut username baru" +
+// "update field username" terjadi atomik.
 export async function adminChangeUsername(targetUid, newUsername) {
   const key = newUsername.toLowerCase();
-  const callerUid = auth.currentUser?.uid;
   const targetRef = doc(db, "users", targetUid);
   const newUsernameRef = doc(db, "usernames", key);
 
@@ -46,12 +55,6 @@ export async function adminChangeUsername(targetUid, newUsername) {
     const targetSnap = await tx.get(targetRef);
     if (!targetSnap.exists()) throw new Error("user-not-found");
     const targetData = targetSnap.data();
-
-    // Larangan "tidak boleh ubah username admin lain" TIDAK berlaku kalau
-    // target-nya adalah diri sendiri (admin boleh ubah username sendiri).
-    if (targetData.role === "admin" && targetUid !== callerUid) {
-      throw new Error("cannot-modify-admin");
-    }
 
     const newUsernameSnap = await tx.get(newUsernameRef);
     if (newUsernameSnap.exists()) throw new Error("username-taken");
