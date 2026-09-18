@@ -44,3 +44,14 @@ export function parseMessageLinks(text) {
   }
   return parts;
 }
+
+// Untuk konteks PRATINJAU non-popup (dropdown notifikasi, daftar kelola
+// notifikasi admin) -- sintaks [[url]] / [[url|label]] diganti jadi teks
+// labelnya SAJA (tanpa tanda kurung siku), TANPA dijadikan elemen <a>
+// yang bisa diklik. Tautan yang sungguh bisa diklik hanya ada di modal
+// detail penuh (parseMessageLinks di atas).
+export function stripLinkSyntax(text) {
+  return (text || "").replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, url, label) =>
+    (label || url).trim()
+  );
+}

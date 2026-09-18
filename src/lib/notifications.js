@@ -13,12 +13,33 @@ import { auth, db } from "./firebase";
 // mana yang sebenarnya mengirim (uid pengirim tetap dicatat di field
 // "sentBy" untuk akuntabilitas internal, tapi TIDAK PERNAH ditampilkan
 // di UI manapun).
-export async function sendNotification({ title, message }) {
+//
+// targetUids: array uid untuk kirim ke pengguna TERTENTU saja, atau
+// null/tidak diisi untuk broadcast ke semua pengguna.
+//
+// Catatan jujur soal privasi: filter "notifikasi ini untuk saya atau
+// bukan" dilakukan di CLIENT (lihat NotificationBell.js), karena
+// Firestore tidak bisa query "array berisi uid saya ATAU field kosong"
+// dalam satu query. Ini berarti notifikasi bertarget TETAP bisa dibaca
+// lewat akses Firestore langsung oleh pengguna lain yang login (rules
+// mengizinkan baca semua dokumen notifications) — hanya TIDAK ditampilkan
+// di UI mereka. Untuk pesan yang isinya benar-benar rahasia/sensitif,
+// mekanisme ini belum cukup; beri tahu saya kalau itu dibutuhkan, karena
+// perlu desain berbeda (subcollection per-user).
+export async function sendNotification({ title, message, targetUids }) {
   await addDoc(collection(db, "notifications"), {
     title: title.trim(),
     message: message.trim(),
     sentBy: auth.currentUser?.uid || null,
+    targetUids: targetUids && targetUids.length ? targetUids : null,
     createdAt: serverTimestamp(),
+  });
+}
+
+export async function updateNotification(id, { title, message }) {
+  await updateDoc(doc(db, "notifications", id), {
+    title: title.trim(),
+    message: message.trim(),
   });
 }
 

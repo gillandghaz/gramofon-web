@@ -475,6 +475,11 @@ select option {
   padding: 1px 7px;
   border-radius: 999px;
   vertical-align: middle;
+  /* Dinaikkan sedikit supaya optically sejajar dengan nama tampilan di
+     sampingnya (vertical-align:middle saja masih terlihat sedikit turun
+     karena tinggi baris teks lebih besar dari badge-nya). */
+  position: relative;
+  top: -1px;
 }
 
 .contact-item {
@@ -592,6 +597,47 @@ select option {
   border-radius: var(--radius-l);
   padding: 22px 20px;
   box-shadow: var(--shadow-elevated);
+}
+/* Dipakai modal yang field-nya butuh ruang lebih (mis. edit kontak,
+   dengan placeholder teks panjang di "Tautan/isi") -- tetap penuh lebar
+   yang sama di layar sempit lewat max-width:100% pada .confirm-backdrop
+   yang sudah punya padding 16px. */
+.confirm-card--wide {
+  max-width: 460px;
+}
+
+.user-picker-list {
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-s);
+  margin-bottom: 4px;
+}
+.user-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-soft);
+}
+.user-picker-row:last-child {
+  border-bottom: none;
+}
+.user-picker-row:hover {
+  background: var(--bg-hover);
+}
+.user-picker-row input[type="checkbox"] {
+  accent-color: var(--accent-teal);
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+.user-picker-row__name {
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .confirm-card h3 {
   margin: 0 0 8px;
@@ -1035,6 +1081,8 @@ html[data-reduce-motion="true"] * {
 }
 .notif-manage-item__body {
   min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 .notif-manage-item__title {
   font-size: 12.5px;
@@ -1044,7 +1092,16 @@ html[data-reduce-motion="true"] * {
   font-size: 11.5px;
   color: var(--text-faint);
   margin-top: 2px;
-  white-space: pre-wrap;
+}
+.notif-manage-item__date {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  margin-top: 4px;
+}
+.notif-manage-item__actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 
@@ -1153,7 +1210,8 @@ html[data-reduce-motion="true"] * {
 }
 
 .notif-manage-item__title,
-.notif-manage-item__msg {
+.notif-manage-item__msg,
+.notif-manage-item__date {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1405,9 +1463,15 @@ html[data-reduce-motion="true"] * {
   .media-controls {
     gap: 10px;
   }
+  .media-controls__field {
+    /* Biarkan lebarnya menyesuaikan isi (bukan dipaksa 45%) -- supaya
+       kalau layarnya cukup lebar (HP besar, mode lanskap, dst) kedua
+       filter tetap muat SATU baris, dan baru melipat ke baris kedua
+       kalau memang benar-benar tidak cukup ruang. */
+    flex: 0 1 auto;
+  }
   .media-controls select {
     min-width: 0;
-    flex: 1 1 45%;
   }
   .notif-detail-card {
     max-height: 85vh;
@@ -1426,4 +1490,8 @@ html[data-reduce-motion="true"] * {
   font-family: var(--font-mono, monospace);
   font-size: 10.5px;
   color: var(--text-secondary);
+}
+.field input::placeholder {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { markNotificationRead } from "@/lib/notifications";
-import { parseMessageLinks } from "@/lib/message-format";
+import { parseMessageLinks, stripLinkSyntax } from "@/lib/message-format";
 
 function formatDate(ts) {
   if (!ts?.toDate) return "";
@@ -25,17 +25,46 @@ export default function NotificationBell() {
   const wrapRef = useRef(null);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "notifications"), (snap) => {
-      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      list.sort((a, b) => {
+    // PENTING (baca juga catatan di firestore.rules): Firestore menolak
+    // TOTAL sebuah query kalau query itu tidak dibatasi where() yang
+    // cocok persis dengan rules-nya -- "rules bukan filter, query itu
+    // semua-atau-tidak-sama-sekali". Makanya di sini WAJIB dua query
+    // terpisah (bukan satu "ambil semua notifications" lalu difilter di
+    // client seperti sebelumnya) -- itu caranya notifikasi bertarget
+    // benar-benar tidak pernah terkirim ke browser pengguna lain sama
+    // sekali (bukan cuma disembunyikan di UI setelah terlanjur diterima).
+    const broadcastQuery = query(collection(db, "notifications"), where("targetUids", "==", null));
+    const targetedQuery = query(
+      collection(db, "notifications"),
+      where("targetUids", "array-contains", user.uid)
+    );
+
+    let broadcastDocs = [];
+    let targetedDocs = [];
+
+    function mergeAndSet() {
+      const merged = [...broadcastDocs, ...targetedDocs];
+      merged.sort((a, b) => {
         const at = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
         const bt = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
         return bt - at;
       });
-      setNotifs(list);
+      setNotifs(merged);
+    }
+
+    const unsub1 = onSnapshot(broadcastQuery, (snap) => {
+      broadcastDocs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      mergeAndSet();
     });
-    return () => unsub();
-  }, []);
+    const unsub2 = onSnapshot(targetedQuery, (snap) => {
+      targetedDocs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      mergeAndSet();
+    });
+    return () => {
+      unsub1();
+      unsub2();
+    };
+  }, [user.uid]);
 
   useEffect(() => {
     function onDocClick(e) {
@@ -97,7 +126,7 @@ export default function NotificationBell() {
                     <span className="notif-item__date">{formatDate(n.createdAt)}</span>
                   </div>
                   <div className="notif-item__title">{n.title}</div>
-                  <div className="notif-item__msg">{n.message}</div>
+                  <div className="notif-item__msg">{stripLinkSyntax(n.message)}</div>
                 </button>
               ))}
             </div>

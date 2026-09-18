@@ -78,14 +78,21 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // ---- notifications/{notifId} : pesan satu-arah admin -> semua user.
-    // Dibaca semua user yang login (broadcast), hanya admin yang boleh
-    // kirim/hapus. Dihapus SUNGGUHAN (bukan soft-delete), makanya tidak
-    // ada "allow update" — begitu dihapus, hilang total tanpa bekas.
+    // ---- notifications/{notifId} : pesan satu-arah admin -> semua user
+    // ATAU ke pengguna tertentu (field targetUids: array uid, atau null
+    // berarti broadcast). PENTING: karena "security rules bukan filter"
+    // (lihat catatan di NotificationBell.js), pengguna biasa HARUS query
+    // dengan where() yang cocok persis salah satu cabang di bawah --
+    // query longgar seperti "ambil semua notifications" akan DITOLAK
+    // TOTAL untuk non-admin, bukan cuma difilter sebagian. Ini yang
+    // membuat notifikasi bertarget benar-benar tidak terbaca oleh
+    // pengguna lain, bukan cuma disembunyikan di UI.
     match /notifications/{notifId} {
-      allow read: if isSignedIn();
-      allow create, delete: if isAdmin();
-      allow update: if false;
+      allow read: if isAdmin()
+        || (isSignedIn() && resource.data.targetUids == null)
+        || (isSignedIn() && resource.data.targetUids is list
+            && resource.data.targetUids.hasAny([request.auth.uid]));
+      allow create, update, delete: if isAdmin();
     }
 
     // ---- media/{mediaId} : entri video/musik milik masing-masing user.

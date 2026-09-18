@@ -23,8 +23,10 @@ import { validateUsername } from "@/lib/validators";
 import {
   listNotifications,
   sendNotification,
+  updateNotification,
   deleteNotification,
 } from "@/lib/notifications";
+import { stripLinkSyntax } from "@/lib/message-format";
 import { listAllMedia, adminDeleteMedia, formatBytes } from "@/lib/media";
 import ConfirmDialog from "@/components/ConfirmDialog";
 
@@ -654,6 +656,20 @@ function NotifikasiSection() {
   const [deleteNotifTarget, setDeleteNotifTarget] = useState(null);
   const [deleteNotifBusy, setDeleteNotifBusy] = useState(false);
 
+  // Kirim ke pengguna tertentu
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [allUsers, setAllUsers] = useState([]);
+  const [userSearch, setUserSearch] = useState("");
+  const [selectedUids, setSelectedUids] = useState([]);
+  const [pendingTargetUids, setPendingTargetUids] = useState(null); // null = kirim ke semua
+
+  // Edit notifikasi terkirim
+  const [editTarget, setEditTarget] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editMessage, setEditMessage] = useState("");
+  const [editBusy, setEditBusy] = useState(false);
+  const [editErr, setEditErr] = useState("");
+
   useEffect(() => {
     refreshNotifs();
   }, []);
@@ -667,21 +683,61 @@ function NotifikasiSection() {
     }
   }
 
-  function handleSendClick() {
+  async function openPicker() {
+    setPickerOpen(true);
+    if (allUsers.length === 0) {
+      setAllUsers(await listAllUsers());
+    }
+  }
+
+  function toggleUser(uid) {
+    setSelectedUids((prev) => (prev.includes(uid) ? prev.filter((u) => u !== uid) : [...prev, uid]));
+  }
+
+  const filteredPickerUsers = useMemo(() => {
+    const q = userSearch.trim().toLowerCase();
+    if (!q) return allUsers;
+    return allUsers.filter(
+      (u) =>
+        (u.displayName || "").toLowerCase().includes(q) ||
+        (u.username || "").toLowerCase().includes(q) ||
+        (u.email || "").toLowerCase().includes(q)
+    );
+  }, [allUsers, userSearch]);
+
+  function confirmPicker() {
+    if (selectedUids.length === 0) return;
+    setPendingTargetUids(selectedUids);
+    setPickerOpen(false);
+    validateAndConfirmSend(selectedUids);
+  }
+
+  function handleSendAllClick() {
+    setPendingTargetUids(null);
+    validateAndConfirmSend(null);
+  }
+
+  function validateAndConfirmSend(targetUids) {
     setNotifErr("");
     if (!notifTitle.trim() || !notifMessage.trim()) {
       setNotifErr("Judul dan isi pesan wajib diisi.");
       return;
     }
+    setPendingTargetUids(targetUids);
     setConfirmingSend(true);
   }
 
   async function handleConfirmSend() {
     setSendBusy(true);
     try {
-      await sendNotification({ title: notifTitle, message: notifMessage });
+      await sendNotification({
+        title: notifTitle,
+        message: notifMessage,
+        targetUids: pendingTargetUids,
+      });
       setNotifTitle("");
       setNotifMessage("");
+      setSelectedUids([]);
       setConfirmingSend(false);
       await refreshNotifs();
     } catch {
@@ -706,11 +762,36 @@ function NotifikasiSection() {
     }
   }
 
+  function openEditNotif(n) {
+    setEditTarget(n);
+    setEditTitle(n.title);
+    setEditMessage(n.message);
+    setEditErr("");
+  }
+
+  async function handleSaveEditNotif() {
+    if (!editTitle.trim() || !editMessage.trim()) {
+      setEditErr("Judul dan isi pesan wajib diisi.");
+      return;
+    }
+    setEditBusy(true);
+    try {
+      await updateNotification(editTarget.id, { title: editTitle, message: editMessage });
+      setEditTarget(null);
+      await refreshNotifs();
+    } catch {
+      setEditErr("Gagal menyimpan perubahan.");
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
   return (
     <div>
       <h3 className="tab-subtitle">Kirim Notifikasi</h3>
       <p className="hint-text" style={{ marginBottom: 10 }}>
-        Dikirim ke seluruh pengguna, selalu tampil dengan nama pengirim "Gramofon".
+        Selalu tampil dengan nama pengirim "Gramofon", ke semua pengguna
+        atau hanya yang dipilih.
       </p>
       <div className="notif-compose">
         <div className="field">
@@ -735,9 +816,14 @@ function NotifikasiSection() {
           </p>
         </div>
         {notifErr && <p className="error-text">{notifErr}</p>}
-        <button className="btn btn--primary btn--sm" onClick={handleSendClick}>
-          Kirim ke Semua Pengguna
-        </button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn btn--primary btn--sm" onClick={handleSendAllClick}>
+            Kirim ke Semua Pengguna
+          </button>
+          <button className="btn btn--ghost btn--sm" onClick={openPicker}>
+            Kirim ke Pengguna Tertentu
+          </button>
+        </div>
       </div>
 
       <div className="settings-divider" />
@@ -752,21 +838,104 @@ function NotifikasiSection() {
         notifs.map((n) => (
           <div className="notif-manage-item" key={n.id}>
             <div className="notif-manage-item__body">
-              <div className="notif-manage-item__title">{n.title}</div>
-              <div className="notif-manage-item__msg">{n.message}</div>
-              <div className="hint-text" style={{ marginTop: 4 }}>{formatDate(n.createdAt)}</div>
+              <div className="notif-manage-item__title">
+                {n.title}
+                {n.targetUids && <span className="badge badge--self">Tertarget</span>}
+              </div>
+              <div className="notif-manage-item__msg">{stripLinkSyntax(n.message)}</div>
+              <div className="notif-manage-item__date">{formatDate(n.createdAt)}</div>
             </div>
-            <button className="btn btn--danger btn--sm" onClick={() => setDeleteNotifTarget(n)}>
-              Hapus
-            </button>
+            <div className="notif-manage-item__actions">
+              <button className="btn btn--ghost btn--sm" onClick={() => openEditNotif(n)}>
+                Edit
+              </button>
+              <button className="btn btn--danger btn--sm" onClick={() => setDeleteNotifTarget(n)}>
+                Hapus
+              </button>
+            </div>
           </div>
         ))
+      )}
+
+      {/* Modal pilih pengguna tertentu */}
+      {pickerOpen && (
+        <div className="confirm-backdrop" onClick={() => setPickerOpen(false)}>
+          <div className="confirm-card" onClick={(e) => e.stopPropagation()}>
+            <h3>Pilih penerima ({selectedUids.length} dipilih)</h3>
+            <input
+              type="text"
+              className="admin-search"
+              style={{ width: "100%", marginBottom: 10 }}
+              placeholder="Cari nama, username, atau email..."
+              value={userSearch}
+              onChange={(e) => setUserSearch(e.target.value)}
+            />
+            <div className="user-picker-list">
+              {filteredPickerUsers.map((u) => (
+                <label className="user-picker-row" key={u.uid}>
+                  <input
+                    type="checkbox"
+                    checked={selectedUids.includes(u.uid)}
+                    onChange={() => toggleUser(u.uid)}
+                  />
+                  <span className="user-picker-row__name">
+                    {u.displayName || u.username}
+                    <span className="hint-text"> @{u.username}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div className="confirm-actions">
+              <button className="btn btn--ghost" onClick={() => setPickerOpen(false)}>
+                Batal
+              </button>
+              <button className="btn btn--primary" onClick={confirmPicker} disabled={selectedUids.length === 0}>
+                Lanjutkan ({selectedUids.length})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal edit notifikasi terkirim */}
+      {editTarget && (
+        <div className="confirm-backdrop" onClick={() => setEditTarget(null)}>
+          <div className="confirm-card" onClick={(e) => e.stopPropagation()}>
+            <h3>Edit notifikasi</h3>
+            <div className="field">
+              <label>Judul</label>
+              <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} maxLength={80} autoFocus />
+            </div>
+            <div className="field">
+              <label>Pesan</label>
+              <textarea
+                value={editMessage}
+                onChange={(e) => setEditMessage(e.target.value)}
+                maxLength={5000}
+                style={{ minHeight: 120 }}
+              />
+            </div>
+            {editErr && <p className="error-text">{editErr}</p>}
+            <div className="confirm-actions">
+              <button className="btn btn--ghost" onClick={() => setEditTarget(null)} disabled={editBusy}>
+                Batal
+              </button>
+              <button className="btn btn--primary" onClick={handleSaveEditNotif} disabled={editBusy}>
+                {editBusy ? "Menyimpan..." : "Simpan"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <ConfirmDialog
         open={confirmingSend}
         title="Kirim notifikasi ini?"
-        message={`Notifikasi "${notifTitle}" akan langsung terkirim ke SEMUA pengguna sebagai pesan dari "Gramofon".`}
+        message={
+          pendingTargetUids
+            ? `Notifikasi "${notifTitle}" akan terkirim ke ${pendingTargetUids.length} pengguna terpilih sebagai pesan dari "Gramofon".`
+            : `Notifikasi "${notifTitle}" akan langsung terkirim ke SEMUA pengguna sebagai pesan dari "Gramofon".`
+        }
         confirmLabel="Ya, Kirim"
         busy={sendBusy}
         onCancel={() => setConfirmingSend(false)}
