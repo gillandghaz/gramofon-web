@@ -125,6 +125,12 @@ input {
 .field label {
   font-size: 12.5px;
   color: var(--text-secondary);
+  /* Kalau keterangan dalam kurung tidak muat di layar sempit, biarkan
+     membungkus ke baris berikutnya (boleh memutus kata kalau memang
+     tidak ada spasi lain yang muat) -- tidak pernah keluar dari lebar
+     kontainernya. */
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 .field input,
 .field textarea {
@@ -351,10 +357,22 @@ select option {
   margin: 0 0 4px;
   font-size: 14px;
 }
+/* .hint-text punya margin-top:-2px secara default (dipakai di banyak
+   tempat lain yang memang butuh rapat, mis. di bawah input) -- di sini
+   di-override supaya SETIAP kali langsung mengikuti judul fitur
+   (.tab-subtitle atau .field-title), jaraknya nyaman & tidak dempet. */
+.tab-subtitle + .hint-text,
+.field-title + .hint-text {
+  margin-top: 6px;
+}
 .hint-inline {
   color: var(--text-faint);
   font-weight: 400;
   font-size: 11.5px;
+}
+.field-title {
+  font-size: 13px;
+  font-weight: 600;
 }
 .settings-divider {
   height: 1px;
@@ -379,6 +397,12 @@ select option {
      layar (nilai tetap kecil ini sengaja TIDAK dibuat berbeda per
      breakpoint -- 6px sudah nyaman baik di desktop maupun HP) */
   margin: 6px 0 0;
+}
+/* Beberapa tempat (SettingTab) menaruh judul & keterangan sebagai dua
+   elemen BERSAUDARA (bukan judul membungkus keterangan) -- aturan di
+   atas tidak berlaku untuk pola ini, jadi ditambahkan terpisah di sini. */
+.setting-row__label + p.hint-text {
+  margin-top: 6px;
 }
 
 .segmented {
@@ -457,15 +481,51 @@ select option {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   padding: 12px 0;
   border-bottom: 1px solid var(--border-soft);
   font-size: 13px;
 }
 .contact-item__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: var(--text-secondary);
+  flex-shrink: 0;
 }
 .contact-item__value {
   color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+}
+.contact-edit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.contact-edit-btn:hover {
+  color: var(--accent-teal);
+  background: var(--bg-hover);
+}
+.contact-desc {
+  margin-top: 16px;
+}
+.contact-desc__text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  margin: 0 0 10px;
 }
 
 /* ---- Password input dengan toggle show/hide ---- */
@@ -689,12 +749,15 @@ html[data-reduce-motion="true"] * {
 .user-row__name {
   /* String panjang (nama tampilan) dipotong dengan "..." -- tidak
      pernah keluar dari kotaknya. */
+  font-size: 12.5px;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 100%;
 }
 .user-row__sub {
+  font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -730,6 +793,10 @@ html[data-reduce-motion="true"] * {
   color: var(--accent-teal);
   text-decoration: none;
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%;
 }
 .contact-item__link:hover {
   text-decoration: underline;
@@ -1071,6 +1138,12 @@ html[data-reduce-motion="true"] * {
   white-space: pre-wrap;
   word-break: break-word;
 }
+.notif-link {
+  color: var(--accent-teal);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .notif-detail-card__foot {
   padding: 12px 20px;
   border-top: 1px solid var(--border-soft);
@@ -1090,17 +1163,29 @@ html[data-reduce-motion="true"] * {
 /* ---- Media: kontrol tampilan (Semua/Per pengguna) & urutkan ---- */
 .media-controls {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  align-items: flex-end;
+  gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 14px;
 }
+.media-controls__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.media-controls__field label {
+  font-size: 11px;
+  color: var(--text-faint);
+}
 .media-controls select {
   /* Styling dasarnya sudah diberikan oleh rule "select" global (termasuk
-     panah kustom) — di sini cukup atur lebar minimumnya saja supaya
-     tidak terlalu sempit dan teks opsinya tidak terpotong. */
-  min-width: 190px;
-  flex: 1 1 190px;
+     panah kustom). Lebarnya dibuat pas dengan isinya (bukan melebar
+     penuh), supaya tetap kompak di layar sempit -- sebelumnya ini yang
+     bikin filter "sangat besar dan memanjang ke bawah" di Android/iPhone. */
+  width: auto;
+  min-width: 140px;
+  padding: 8px 30px 8px 11px;
+  font-size: 12px;
 }
 .media-group {
   margin-bottom: 18px;
@@ -1318,11 +1403,11 @@ html[data-reduce-motion="true"] * {
   }
 
   .media-controls {
-    flex-direction: column;
-    align-items: stretch;
+    gap: 10px;
   }
   .media-controls select {
-    width: 100%;
+    min-width: 0;
+    flex: 1 1 45%;
   }
   .notif-detail-card {
     max-height: 85vh;
@@ -1332,4 +1417,13 @@ html[data-reduce-motion="true"] * {
     height: 30px;
     font-size: 11.5px;
   }
+}
+.hint-text code {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: var(--font-mono, monospace);
+  font-size: 10.5px;
+  color: var(--text-secondary);
 }

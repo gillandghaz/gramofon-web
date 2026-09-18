@@ -90,14 +90,14 @@ export default function ProfileMenu({ onOpenSettings }) {
 
 function SettingsIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-      <circle cx="8" cy="8" r="2.3" stroke="currentColor" strokeWidth="1.4" />
+    <svg width="15" height="15" viewBox="0 0 20 20" fill="none">
       <path
-        d="M8 1.8v1.6M8 12.6v1.6M14.2 8h-1.6M3.4 8H1.8M12.1 3.9l-1.1 1.1M5 10l-1.1 1.1M12.1 12.1 11 11M5 6 3.9 3.9"
+        d="M8.3 2.6c.2-.9 1.2-.9 1.4 0l.14.63a1 1 0 0 0 1.35.71l.6-.25c.87-.36 1.6.53 1.16 1.33l-.32.56a1 1 0 0 0 .5 1.44l.6.22c.9.32.9 1.5 0 1.82l-.6.22a1 1 0 0 0-.5 1.44l.32.56c.44.8-.29 1.69-1.16 1.33l-.6-.25a1 1 0 0 0-1.35.71l-.14.63c-.2.9-1.2.9-1.4 0l-.14-.63a1 1 0 0 0-1.35-.71l-.6.25c-.87.36-1.6-.53-1.16-1.33l.32-.56a1 1 0 0 0-.5-1.44l-.6-.22c-.9-.32-.9-1.5 0-1.82l.6-.22a1 1 0 0 0 .5-1.44l-.32-.56c-.44-.8.29-1.69 1.16-1.33l.6.25a1 1 0 0 0 1.35-.71l.14-.63z"
         stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
+        strokeWidth="1.15"
+        strokeLinejoin="round"
       />
+      <circle cx="9" cy="9" r="2.1" stroke="currentColor" strokeWidth="1.15" />
     </svg>
   );
 }

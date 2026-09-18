@@ -101,7 +101,7 @@ export default function AccountTab() {
           onChange={handlePhotoChange}
         />
         <div>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>Foto profil</div>
+          <div className="field-title">Foto profil</div>
           <p className="hint-text">JPG/PNG, otomatis diperkecil, maks 8MB.</p>
           {photoErr && <p className="error-text" style={{ margin: 0 }}>{photoErr}</p>}
         </div>
@@ -116,7 +116,7 @@ export default function AccountTab() {
 
       <div className="field">
         <label>
-          Username <span className="hint-inline">(permanen, hanya admin yang bisa mengubah)</span>
+          Username <span className="hint-inline">(hanya admin yang bisa mengubah)</span>
         </label>
         <input value={profile?.username ? `@${profile.username}` : ""} disabled />
       </div>

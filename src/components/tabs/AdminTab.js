@@ -728,6 +728,11 @@ function NotifikasiSection() {
             maxLength={5000}
             style={{ minHeight: 140 }}
           />
+          <p className="hint-text" style={{ marginTop: 4 }}>
+            Sisipkan tautan dengan{" "}
+            <code>[[https://contoh.com]]</code> atau{" "}
+            <code>[[https://contoh.com|Teks tautan]]</code> untuk kasih label sendiri.
+          </p>
         </div>
         {notifErr && <p className="error-text">{notifErr}</p>}
         <button className="btn btn--primary btn--sm" onClick={handleSendClick}>
@@ -937,16 +942,22 @@ function MediaSection() {
       </div>
 
       <div className="media-controls">
-        <select value={groupMode} onChange={(e) => setGroupMode(e.target.value)}>
-          <option value="all">Tampilkan: Semua media</option>
-          <option value="byUser">Tampilkan: Per pengguna</option>
-        </select>
-        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-          <option value="newest">Urutkan: Terbaru</option>
-          <option value="title">Urutkan: Judul (A-Z)</option>
-          <option value="sizeDesc">Urutkan: Ukuran terbesar</option>
-          <option value="sizeAsc">Urutkan: Ukuran terkecil</option>
-        </select>
+        <div className="media-controls__field">
+          <label>Tampilkan</label>
+          <select value={groupMode} onChange={(e) => setGroupMode(e.target.value)}>
+            <option value="all">Semua media</option>
+            <option value="byUser">Per pengguna</option>
+          </select>
+        </div>
+        <div className="media-controls__field">
+          <label>Urutkan</label>
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+            <option value="newest">Terbaru</option>
+            <option value="title">Judul (A-Z)</option>
+            <option value="sizeDesc">Ukuran terbesar</option>
+            <option value="sizeAsc">Ukuran terkecil</option>
+          </select>
+        </div>
       </div>
 
       {msg && <p className="error-text">{msg}</p>}

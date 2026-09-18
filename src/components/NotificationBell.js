@@ -5,6 +5,7 @@ import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { markNotificationRead } from "@/lib/notifications";
+import { parseMessageLinks } from "@/lib/message-format";
 
 function formatDate(ts) {
   if (!ts?.toDate) return "";
@@ -114,7 +115,7 @@ export default function NotificationBell() {
               <div className="notif-detail-card__title">{detail.title}</div>
               <div className="notif-detail-card__date">{formatDate(detail.createdAt)}</div>
             </div>
-            <div className="notif-detail-card__body">{detail.message}</div>
+            <div className="notif-detail-card__body">{parseMessageLinks(detail.message)}</div>
             <div className="notif-detail-card__foot">
               <button className="btn btn--ghost btn--sm" onClick={() => setDetail(null)}>
                 Tutup
