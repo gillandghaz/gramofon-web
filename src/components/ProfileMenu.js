@@ -7,7 +7,7 @@ import { auth } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import ConfirmDialog from "@/components/ConfirmDialog";
 
-export default function ProfileMenu({ onOpenSettings }) {
+export default function ProfileMenu() {
   const router = useRouter();
   const { user, profile } = useAuth();
   const [open, setOpen] = useState(false);
@@ -54,7 +54,7 @@ export default function ProfileMenu({ onOpenSettings }) {
             className="profile-menu__item"
             onClick={() => {
               setOpen(false);
-              onOpenSettings();
+              router.push("/dashboard?tab=setting");
             }}
           >
             <SettingsIcon />

@@ -11,7 +11,7 @@ export default function LandingPage() {
 
   useEffect(() => {
     if (!loading && user) {
-      router.replace("/dashboard");
+      router.replace("/app");
     }
   }, [loading, user, router]);
 
@@ -43,10 +43,10 @@ export default function LandingPage() {
         </span>
         {!loading && (
           <Link
-            href={user ? "/dashboard" : "/login"}
+            href={user ? "/app" : "/login"}
             className="btn btn--primary"
           >
-            {user ? "Buka Dashboard" : "Login"}
+            {user ? "Buka Aplikasi" : "Login"}
           </Link>
         )}
       </header>
@@ -96,11 +96,11 @@ export default function LandingPage() {
           dari perangkat mana pun — semuanya tersimpan aman di akun Anda.
         </p>
         <Link
-          href={user ? "/dashboard" : "/login"}
+          href={user ? "/app" : "/login"}
           className="btn btn--primary"
           style={{ padding: "13px 28px", fontSize: 15 }}
         >
-          {user ? "Buka Dashboard" : "Mulai Sekarang"}
+          {user ? "Buka Aplikasi" : "Mulai Sekarang"}
         </Link>
       </section>
 

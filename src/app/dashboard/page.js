@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import RequireAuth from "@/components/RequireAuth";
 import NotificationBell from "@/components/NotificationBell";
@@ -27,7 +29,9 @@ export default function DashboardPage() {
 
 function DashboardInner() {
   const { isAdmin } = useAuth();
-  const [activeTab, setActiveTab] = useState("account");
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab") === "setting" ? "setting" : "account";
+  const [activeTab, setActiveTab] = useState(initialTab);
 
   // Urutan menu sesuai permintaan: Account, Settings, (Admin kalau admin), Contact.
   const tabs = isAdmin ? [...BASE_TABS, ADMIN_TAB, KONTAK_TAB] : [...BASE_TABS, KONTAK_TAB];
@@ -35,12 +39,16 @@ function DashboardInner() {
   return (
     <div className="dashboard-page">
       <header className="dashboard-topbar">
-        <span className="dashboard-brand">🎧 Gramofon</span>
-        {/* Kanan atas HANYA profil + notifikasi. Klik avatar -> dropdown
-            Settings/Logout (gaya Google), bukan tombol Logout terpisah. */}
+        {/* Sekarang benar-benar menautkan ke halaman player utama
+            (/app) -- tampilannya sengaja dijaga IDENTIK (tidak ada
+            garis bawah/warna hover baru) lewat class dashboard-brand
+            yang sama seperti sebelum jadi tautan. */}
+        <Link href="/app" className="dashboard-brand">
+          🎧 Gramofon
+        </Link>
         <div className="dashboard-topbar__right">
           <NotificationBell />
-          <ProfileMenu onOpenSettings={() => setActiveTab("setting")} />
+          <ProfileMenu />
         </div>
       </header>
 

@@ -89,7 +89,7 @@ export default function RegisterPage() {
         username,
         displayName: displayName.trim() || username,
       });
-      router.push("/dashboard");
+      router.push("/app");
     } catch (err) {
       console.error("Register error:", err);
       if (err.message === "username-taken") {
@@ -108,7 +108,7 @@ export default function RegisterPage() {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       await ensureUserProfile(result.user);
-      router.push("/dashboard");
+      router.push("/app");
     } catch (err) {
       if (err.code !== "auth/popup-closed-by-user") {
         setError(friendlyAuthError(err.code));

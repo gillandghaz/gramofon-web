@@ -48,7 +48,7 @@ export default function LoginPage() {
     setBusy(true);
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
-      router.push("/dashboard");
+      router.push("/app");
     } catch (err) {
       // Firebase Auth SUDAH menerapkan rate limiting bawaan: setelah
       // beberapa kali gagal berturut-turut dari kombinasi
@@ -68,7 +68,7 @@ export default function LoginPage() {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       await ensureUserProfile(result.user);
-      router.push("/dashboard");
+      router.push("/app");
     } catch (err) {
       if (err.code !== "auth/popup-closed-by-user") {
         setError(friendlyAuthError(err.code));

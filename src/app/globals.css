@@ -297,6 +297,8 @@ select option {
 .dashboard-brand {
   font-weight: 700;
   font-size: 15px;
+  text-decoration: none;
+  color: inherit;
 }
 
 .dashboard-shell {
@@ -1364,6 +1366,94 @@ html[data-reduce-motion="true"] * {
   background: rgba(232, 99, 122, 0.12);
 }
 
+/* ---- Halaman /app: perpustakaan + pemutar ---- */
+.app-shell {
+  flex: 1;
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 24px 16px 120px;
+  overflow-y: auto;
+}
+.app-quota {
+  margin-bottom: 18px;
+}
+.app-quota__bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.app-quota__fill {
+  height: 100%;
+  background: var(--accent-grad);
+  border-radius: 999px;
+}
+.app-upload {
+  margin-bottom: 20px;
+}
+.app-video-wrap {
+  display: none;
+  margin-bottom: 18px;
+  border-radius: var(--radius-l);
+  overflow: hidden;
+  background: #000;
+}
+.app-video-wrap.is-visible {
+  display: block;
+}
+.app-video-el {
+  width: 100%;
+  max-height: 380px;
+  display: block;
+}
+.app-media-row {
+  cursor: pointer;
+}
+.app-media-row.is-playing {
+  border-color: var(--accent-teal);
+  background: rgba(51, 217, 196, 0.06);
+}
+
+.app-playerbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-soft);
+  padding: 10px 20px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  z-index: 60;
+}
+.app-playerbar__meta {
+  font-size: 12.5px;
+  font-weight: 600;
+  min-width: 140px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.app-playerbar__controls {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.app-playerbar__time {
+  font-family: var(--font-mono, monospace);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
 @media (max-width: 480px) {
   .dashboard-shell {
     padding: 14px 10px;
@@ -1494,4 +1584,11 @@ html[data-reduce-motion="true"] * {
 .field input::placeholder {
   overflow: hidden;
   text-overflow: ellipsis;
+
+  .app-playerbar__meta {
+    display: none;
+  }
+  .app-shell {
+    padding: 18px 12px 110px;
+  }
 }
