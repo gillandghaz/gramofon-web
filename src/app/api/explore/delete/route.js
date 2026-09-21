@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
-import { getCloudinary } from "@/lib/cloudinary-admin";
+import { destroyAsset } from "@/lib/cloudinary-admin";
 
 export async function POST(request) {
   try {
@@ -17,25 +17,18 @@ export async function POST(request) {
     const { mediaId } = await request.json();
     if (!mediaId) return NextResponse.json({ error: "mediaId wajib diisi." }, { status: 400 });
 
-    const mediaSnap = await adminDb().collection("media").doc(mediaId).get();
-    if (!mediaSnap.exists) {
-      return NextResponse.json({ error: "Media tidak ditemukan." }, { status: 404 });
-    }
-    const media = mediaSnap.data();
+    const snap = await adminDb().collection("exploreMedia").doc(mediaId).get();
+    if (!snap.exists) return NextResponse.json({ error: "Media tidak ditemukan." }, { status: 404 });
+    const media = snap.data();
 
-    const cloudinary = getCloudinary();
-    await cloudinary.uploader
-      .destroy(media.publicId, { resource_type: media.resourceType })
-      .catch((e) => console.error("Gagal hapus asset Cloudinary:", e));
-
-    await adminDb().collection("media").doc(mediaId).delete();
+    await destroyAsset(media.publicId, media.resourceType).catch((e) =>
+      console.error("Gagal hapus asset Cloudinary Explore:", e)
+    );
+    await adminDb().collection("exploreMedia").doc(mediaId).delete();
 
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error("delete-media error:", err);
-    const message = err?.message?.includes("belum dikonfigurasi")
-      ? err.message
-      : "Terjadi kesalahan di server.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("explore delete error:", err);
+    return NextResponse.json({ error: "Terjadi kesalahan di server." }, { status: 500 });
   }
 }

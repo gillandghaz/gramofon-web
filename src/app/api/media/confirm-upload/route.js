@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
-import { getCloudinary } from "@/lib/cloudinary-admin";
+import { destroyAsset } from "@/lib/cloudinary-admin";
 
 const DEFAULT_LIMIT_MB = 200;
 
@@ -36,8 +36,6 @@ export async function POST(request) {
       return NextResponse.json({ error: "public_id tidak valid untuk akun ini." }, { status: 403 });
     }
 
-    const cloudinary = getCloudinary();
-
     // PENEGAKAN KUOTA SUNGGUHAN: hitung ulang pemakaian dari data yang
     // SUDAH tersimpan di Firestore (belum termasuk file ini), lalu
     // bandingkan dengan ukuran ASLI file ini yang dilaporkan Cloudinary
@@ -51,9 +49,9 @@ export async function POST(request) {
     const limitBytes = limitMB * 1024 * 1024;
 
     if (usedBytes + bytes > limitBytes) {
-      await cloudinary.uploader
-        .destroy(publicId, { resource_type: resourceType })
-        .catch((e) => console.error("Gagal menghapus file yang melebihi kuota:", e));
+      await destroyAsset(publicId, resourceType).catch((e) =>
+        console.error("Gagal menghapus file yang melebihi kuota:", e)
+      );
       return NextResponse.json(
         {
           error: `File ini (${(bytes / 1024 / 1024).toFixed(1)}MB) melebihi sisa kuota Anda. File telah dibatalkan/dihapus.`,

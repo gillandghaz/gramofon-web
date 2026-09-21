@@ -1393,21 +1393,6 @@ html[data-reduce-motion="true"] * {
 .app-upload {
   margin-bottom: 20px;
 }
-.app-video-wrap {
-  display: none;
-  margin-bottom: 18px;
-  border-radius: var(--radius-l);
-  overflow: hidden;
-  background: #000;
-}
-.app-video-wrap.is-visible {
-  display: block;
-}
-.app-video-el {
-  width: 100%;
-  max-height: 380px;
-  display: block;
-}
 .app-media-row {
   cursor: pointer;
 }
@@ -1452,6 +1437,217 @@ html[data-reduce-motion="true"] * {
   font-size: 10.5px;
   color: var(--text-faint);
   flex-shrink: 0;
+}
+
+/* ---- /app: topbar gabungan (logo + navigasi mode + notifikasi/profil) ---- */
+.app-topbar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 20px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-soft);
+}
+.app-topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.app-topbar__nav {
+  justify-self: center;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+/* Navigasi mode versi HP: bar tersendiri di bawah (di atas player bar).
+   Disembunyikan di desktop -- lihat media query paling bawah file. */
+.app-bottomnav {
+  display: none;
+}
+.app-empty-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-l);
+  padding: 22px 20px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+/* ---- Video: satu elemen, 3 kondisi tampilan berbeda ---- */
+.app-video-wrap {
+  background: #000;
+}
+.app-video-wrap.is-theater {
+  max-width: 720px;
+  margin: 16px auto 0;
+  border-radius: var(--radius-l);
+  overflow: hidden;
+}
+.app-video-wrap.is-theater .app-video-el {
+  width: 100%;
+  max-height: 400px;
+  display: block;
+}
+.app-video-wrap.is-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+.app-video-wrap.is-mini {
+  position: fixed;
+  top: 90px;
+  right: 20px;
+  width: 260px;
+  border-radius: var(--radius-m);
+  overflow: hidden;
+  box-shadow: var(--shadow-elevated);
+  z-index: 90;
+  border: 1px solid var(--border);
+}
+.app-video-wrap.is-mini .app-video-el {
+  width: 100%;
+  aspect-ratio: 16/9;
+  display: block;
+}
+.app-video-drag {
+  background: var(--bg-surface);
+  color: var(--text-faint);
+  text-align: center;
+  font-size: 10px;
+  padding: 3px 0;
+  cursor: grab;
+  user-select: none;
+}
+.app-video-mini-controls {
+  background: var(--bg-surface);
+  display: flex;
+  justify-content: center;
+  padding: 6px;
+}
+
+/* ---- Audio Only ---- */
+.app-audio-visual {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  padding: 40px 16px;
+}
+.app-disc {
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  background: repeating-radial-gradient(circle at center, #1a2030 0 2px, #151a26 2px 4px);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.app-disc__label {
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--text-secondary);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+.app-bars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  height: 64px;
+  width: 260px;
+}
+.app-bars span {
+  flex: 1;
+  max-width: 7px;
+  border-radius: 3px 3px 0 0;
+  background: var(--accent-grad);
+  height: 4px;
+  transition: height 0.06s linear;
+}
+
+/* ---- Manage Media: playlist ---- */
+.app-playlist-bar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.app-playlist-chip {
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 6px 13px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.app-playlist-chip.is-active {
+  background: var(--accent-grad-soft);
+  color: var(--text-primary);
+  border-color: transparent;
+}
+.app-playlist-new {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.app-playlist-new input {
+  flex: 1;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  color: var(--text-primary);
+  padding: 9px 12px;
+  font-size: 13px;
+}
+.addmenu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  padding: 9px 12px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.addmenu-item:hover {
+  background: var(--bg-hover);
+}
+
+.app-bottomnav__btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  padding: 6px 2px;
+  font-size: 9.5px;
+  cursor: pointer;
+}
+.app-bottomnav__btn.is-active {
+  color: var(--accent-teal);
+}
+.app-bottomnav__icon {
+  font-size: 16px;
+  line-height: 1;
 }
 
 @media (max-width: 480px) {
@@ -1590,5 +1786,38 @@ html[data-reduce-motion="true"] * {
   }
   .app-shell {
     padding: 18px 12px 110px;
+  }
+
+  .app-video-wrap.is-mini {
+    width: 200px;
+    right: 10px;
+    top: 74px;
+  }
+  .app-disc {
+    width: 130px;
+    height: 130px;
+  }
+  .app-bars {
+    width: 200px;
+    height: 48px;
+  }
+
+  /* ---- /app di HP: navigasi mode pindah ke bar bawah tersendiri,
+     bukan lagi di topbar (supaya topbar tidak sesak) ---- */
+  .app-topbar__nav {
+    display: none;
+  }
+  .app-bottomnav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(54px + env(safe-area-inset-bottom));
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border-soft);
+    z-index: 55;
+  }
+  .app-shell {
+    padding-bottom: 170px;
   }
 }

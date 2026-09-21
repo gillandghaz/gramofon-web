@@ -54,6 +54,17 @@ export default function ProfileMenu() {
             className="profile-menu__item"
             onClick={() => {
               setOpen(false);
+              router.push("/app?view=theater");
+            }}
+          >
+            <HomeIcon />
+            Beranda
+          </button>
+          <button
+            type="button"
+            className="profile-menu__item"
+            onClick={() => {
+              setOpen(false);
               router.push("/dashboard?tab=setting");
             }}
           >
@@ -88,16 +99,34 @@ export default function ProfileMenu() {
   );
 }
 
-function SettingsIcon() {
+function HomeIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 20 20" fill="none">
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
       <path
-        d="M8.3 2.6c.2-.9 1.2-.9 1.4 0l.14.63a1 1 0 0 0 1.35.71l.6-.25c.87-.36 1.6.53 1.16 1.33l-.32.56a1 1 0 0 0 .5 1.44l.6.22c.9.32.9 1.5 0 1.82l-.6.22a1 1 0 0 0-.5 1.44l.32.56c.44.8-.29 1.69-1.16 1.33l-.6-.25a1 1 0 0 0-1.35.71l-.14.63c-.2.9-1.2.9-1.4 0l-.14-.63a1 1 0 0 0-1.35-.71l-.6.25c-.87.36-1.6-.53-1.16-1.33l.32-.56a1 1 0 0 0-.5-1.44l-.6-.22c-.9-.32-.9-1.5 0-1.82l.6-.22a1 1 0 0 0 .5-1.44l-.32-.56c-.44-.8.29-1.69 1.16-1.33l.6.25a1 1 0 0 0 1.35-.71l.14-.63z"
+        d="M2 7.2 8 2.5l6 4.7V13a1 1 0 0 1-1 1h-3v-4H6v4H3a1 1 0 0 1-1-1V7.2z"
         stroke="currentColor"
-        strokeWidth="1.15"
+        strokeWidth="1.3"
         strokeLinejoin="round"
       />
-      <circle cx="9" cy="9" r="2.1" stroke="currentColor" strokeWidth="1.15" />
+    </svg>
+  );
+}
+function SettingsIcon() {
+  // Ikon gear standar (12 gigi) -- lebih jelas & simetris di ukuran kecil
+  // dibanding path kustom sebelumnya.
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+      <path
+        d="M19.4 13.5a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V19.5a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H4.5a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H10a1.65 1.65 0 0 0 1-1.51V4.5a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V10a1.65 1.65 0 0 0 1.51 1h.09a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }

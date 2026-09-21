@@ -110,6 +110,27 @@ service cloud.firestore {
       allow update: if isAdmin();
     }
 
+    // ---- exploreMedia/{mediaId} : media publik yang dikurasi admin,
+    // bisa dilihat SEMUA pengguna yang login (terlepas dari saklar
+    // exploreEnabled -- saklar itu cuma mengatur tampil/tidaknya MENU
+    // Explore di UI untuk non-admin, bukan soal boleh/tidaknya membaca
+    // datanya; kalau menunya disembunyikan, otomatis tidak ada yang
+    // query ke sini juga). Hanya admin yang boleh kirim/hapus.
+    match /exploreMedia/{mediaId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ---- playlists/{playlistId} : playlist pribadi tiap pengguna.
+    // PENTING: rule di bawah bergantung pada resource.data.uid, jadi
+    // SETIAP query List HARUS dibatasi where("uid","==",uid_saya) di
+    // client (lihat playlists.js) -- persis pola yang sama dengan
+    // notifications/{notifId} di atas ("rules bukan filter").
+    match /playlists/{playlistId} {
+      allow read, update, delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

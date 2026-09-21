@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Logo from "@/components/Logo";
 import { useAuth } from "@/lib/auth-context";
 
 export default function LandingPage() {
@@ -38,8 +39,17 @@ export default function LandingPage() {
           padding: "18px clamp(16px, 5vw, 48px)",
         }}
       >
-        <span style={{ fontWeight: 700, fontSize: 17, letterSpacing: 0.3 }}>
-          🎧 Gramofon
+        <span
+          style={{
+            fontWeight: 700,
+            fontSize: 17,
+            letterSpacing: 0.3,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <Logo size={24} /> Gramofon
         </span>
         {!loading && (
           <Link

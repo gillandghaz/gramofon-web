@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
-import { getCloudinary } from "@/lib/cloudinary-admin";
+import { destroyAsset } from "@/lib/cloudinary-admin";
 
 export async function POST(request) {
   try {
@@ -32,10 +32,9 @@ export async function POST(request) {
       return NextResponse.json({ error: "Tidak punya izin menghapus media ini." }, { status: 403 });
     }
 
-    const cloudinary = getCloudinary();
-    await cloudinary.uploader
-      .destroy(media.publicId, { resource_type: media.resourceType })
-      .catch((e) => console.error("Gagal hapus asset Cloudinary:", e));
+    await destroyAsset(media.publicId, media.resourceType).catch((e) =>
+      console.error("Gagal hapus asset Cloudinary:", e)
+    );
 
     await adminDb().collection("media").doc(mediaId).delete();
 

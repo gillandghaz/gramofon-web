@@ -33,6 +33,33 @@ export async function setSelfDeleteEnabled(enabled) {
   await setDoc(SETTINGS_DOC, { selfDeleteEnabled: enabled }, { merge: true });
 }
 
+// Saklar admin: tampilkan/sembunyikan menu Explore untuk pengguna biasa.
+// Admin SELALU melihat menu Explore apa pun nilainya (supaya tetap bisa
+// mengelola isinya) — pengecualian itu ditangani di UI (/app/page.js),
+// bukan di sini. Default TRUE kalau belum pernah di-set.
+export async function isExploreEnabled() {
+  const snap = await getDoc(SETTINGS_DOC);
+  if (!snap.exists()) return true;
+  return snap.data().exploreEnabled !== false;
+}
+
+export async function setExploreEnabled(enabled) {
+  await setDoc(SETTINGS_DOC, { exploreEnabled: enabled }, { merge: true });
+}
+
+// Batas total penyimpanan utuk seluruh Explore (bukan per-akun) —
+// diatur & dilihat LANGSUNG di menu Explore (khusus admin), bukan di
+// dashboard. Default 5000MB (5GB) kalau belum pernah diatur.
+export async function getExploreLimitMB() {
+  const snap = await getDoc(SETTINGS_DOC);
+  if (!snap.exists()) return 5000;
+  return snap.data().exploreLimitMB ?? 5000;
+}
+
+export async function setExploreLimitMB(mb) {
+  await setDoc(SETTINGS_DOC, { exploreLimitMB: mb }, { merge: true });
+}
+
 // ---- Kuota penyimpanan per akun ----
 // Batas EFEKTIF seorang user = users/{uid}.storageLimitMB (kalau diset
 // khusus lewat Kelola Pengguna) ATAU settings/app.defaultStorageLimitMB

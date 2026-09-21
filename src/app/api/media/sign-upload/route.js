@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
-import { getCloudinary } from "@/lib/cloudinary-admin";
+import { signParams } from "@/lib/cloudinary-admin";
 
 const DEFAULT_LIMIT_MB = 200;
 
@@ -52,22 +52,11 @@ export async function POST(request) {
       );
     }
 
-    const cloudinary = getCloudinary();
     const timestamp = Math.round(Date.now() / 1000);
     const folder = `gramofon/${uid}`;
-    const paramsToSign = { timestamp, folder };
-    const signature = cloudinary.utils.api_sign_request(
-      paramsToSign,
-      process.env.CLOUDINARY_API_SECRET
-    );
+    const { signature, apiKey, cloudName } = signParams({ timestamp, folder });
 
-    return NextResponse.json({
-      signature,
-      timestamp,
-      folder,
-      apiKey: process.env.CLOUDINARY_API_KEY,
-      cloudName: process.env.CLOUDINARY_CLOUD_NAME,
-    });
+    return NextResponse.json({ signature, timestamp, folder, apiKey, cloudName });
   } catch (err) {
     console.error("sign-upload error:", err);
     const message = err?.message?.includes("belum dikonfigurasi")

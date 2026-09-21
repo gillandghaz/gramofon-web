@@ -7,6 +7,8 @@ import {
   setRegistrationOpen,
   isSelfDeleteEnabled,
   setSelfDeleteEnabled,
+  isExploreEnabled,
+  setExploreEnabled,
   getDefaultStorageLimitMB,
   setDefaultStorageLimitMB,
 } from "@/lib/settings";
@@ -117,6 +119,9 @@ function UmumSection() {
   const [selfDeleteOn, setSelfDeleteOn] = useState(true);
   const [loadingSelfDelete, setLoadingSelfDelete] = useState(true);
   const [selfDeleteMsg, setSelfDeleteMsg] = useState("");
+  const [exploreOn, setExploreOn] = useState(true);
+  const [loadingExplore, setLoadingExplore] = useState(true);
+  const [exploreMsg, setExploreMsg] = useState("");
   const [defaultQuota, setDefaultQuota] = useState(200);
   const [loadingQuota, setLoadingQuota] = useState(true);
   const [quotaInput, setQuotaInput] = useState("200");
@@ -133,6 +138,10 @@ function UmumSection() {
     isSelfDeleteEnabled().then((v) => {
       setSelfDeleteOn(v);
       setLoadingSelfDelete(false);
+    });
+    isExploreEnabled().then((v) => {
+      setExploreOn(v);
+      setLoadingExplore(false);
     });
     getDefaultStorageLimitMB().then((v) => {
       setDefaultQuota(v);
@@ -160,6 +169,17 @@ function UmumSection() {
     } catch {
       setSelfDeleteOn(!next);
       setSelfDeleteMsg("Gagal mengubah pengaturan hapus akun.");
+    }
+  }
+
+  async function handleToggleExplore() {
+    const next = !exploreOn;
+    setExploreOn(next);
+    try {
+      await setExploreEnabled(next);
+    } catch {
+      setExploreOn(!next);
+      setExploreMsg("Gagal mengubah pengaturan Explore.");
     }
   }
 
@@ -237,6 +257,29 @@ function UmumSection() {
         )}
       </div>
       {selfDeleteMsg && <p className="error-text">{selfDeleteMsg}</p>}
+
+      <div className="setting-row">
+        <div className="setting-row__label">
+          <span>Menu Explore</span>
+          <p className="hint-text">
+            Kalau dimatikan, pengguna biasa melihat pesan "Explore
+            dinonaktifkan admin" — admin tetap selalu bisa mengakses menu
+            ini untuk mengelola isinya.
+          </p>
+        </div>
+        {!loadingExplore && (
+          <button
+            type="button"
+            className="switch"
+            role="switch"
+            aria-checked={exploreOn}
+            onClick={handleToggleExplore}
+          >
+            <span className="switch__thumb" />
+          </button>
+        )}
+      </div>
+      {exploreMsg && <p className="error-text">{exploreMsg}</p>}
 
       <div className="settings-divider" />
 
