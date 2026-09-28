@@ -1,0 +1,440 @@
+/* ==========================================================
+   Tema pemutar Gramofon untuk /app — semua class diawali "gp-"
+   dan dibungkus ".gramofon-player" supaya tidak bentrok dengan
+   globals.css yang dipakai halaman lain. Warna DIAMBIL LANGSUNG
+   dari token warna asli Gramofon (globals.css) supaya konsisten.
+   ========================================================== */
+.gramofon-player{
+  --gp-bg:var(--bg-deep);
+  --gp-bg-2:var(--bg-surface);
+  --gp-panel:var(--bg-elevated);
+  --gp-panel-2:var(--bg-hover);
+  --gp-line:var(--border);
+  --gp-line-soft:var(--border-soft);
+  --gp-text:var(--text-primary);
+  --gp-muted:var(--text-secondary);
+  --gp-dim:var(--text-faint);
+  --gp-accent:var(--accent-teal);
+  --gp-accent-2:var(--accent-violet);
+  --gp-accent-ink:#062420;
+  --gp-danger:var(--danger);
+  --gp-grad:var(--accent-grad);
+  --gp-radius-s:var(--radius-s);
+  --gp-radius-m:var(--radius-m);
+  --gp-radius-l:var(--radius-l);
+  --gp-font:var(--font-ui);
+  --gp-topbar-h:60px;
+  --gp-bottombar-h:88px;
+
+  font-family:var(--gp-font);font-size:14px;line-height:1.45;color:var(--gp-text);
+  background:var(--gp-bg);
+  height:100dvh;overflow:hidden;
+  display:grid;grid-template-rows:var(--gp-topbar-h) minmax(0,1fr) var(--gp-bottombar-h);
+  padding-top:env(safe-area-inset-top);
+  position:relative;
+}
+.gramofon-player *{box-sizing:border-box}
+.gramofon-player button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+.gramofon-player input,.gramofon-player select,.gramofon-player textarea{font:inherit;color:inherit}
+.gramofon-player h1,.gramofon-player h2,.gramofon-player h3,.gramofon-player p{margin:0}
+.gramofon-player .gp-ic{display:block;width:1.15em;height:1.15em;flex:none}
+.gramofon-player .gp-muted{color:var(--gp-muted)}
+.gramofon-player .gp-two-lines{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.gramofon-player .gp-ellip{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+
+/* ---------- tooltip kustom (ganti title="" browser polos) ---------- */
+.gramofon-player [data-tip]{position:relative}
+.gramofon-player [data-tip]::after{
+  content:attr(data-tip);position:absolute;bottom:calc(100% + 10px);left:50%;
+  transform:translate(-50%,4px);background:#05070c;color:var(--gp-text);
+  padding:6px 11px;border-radius:8px;font-size:11.5px;font-weight:500;
+  white-space:nowrap;box-shadow:0 10px 24px -8px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.09);
+  opacity:0;pointer-events:none;transition:opacity .15s ease,transform .15s ease;z-index:220;
+}
+.gramofon-player [data-tip]::before{
+  content:"";position:absolute;bottom:calc(100% + 5px);left:50%;transform:translateX(-50%);
+  border:5px solid transparent;border-top-color:#05070c;opacity:0;transition:opacity .15s ease;
+  pointer-events:none;z-index:220;
+}
+.gramofon-player [data-tip]:hover::after,.gramofon-player [data-tip]:focus-visible::after{opacity:1;transform:translate(-50%,0)}
+.gramofon-player [data-tip]:hover::before,.gramofon-player [data-tip]:focus-visible::before{opacity:1}
+.gramofon-player [data-tip-up]::after{bottom:auto;top:calc(100% + 10px);transform:translate(-50%,-4px)}
+.gramofon-player [data-tip-up]::before{bottom:auto;top:calc(100% + 5px);border-top-color:transparent;border-bottom-color:#05070c}
+.gramofon-player [data-tip-up]:hover::after{transform:translate(-50%,0)}
+.gramofon-player .gp-tip-title[data-tip]::after{
+  white-space:normal;max-width:280px;text-align:left;line-height:1.4;
+  display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;
+}
+@media (hover:none){ .gramofon-player [data-tip]::after,.gramofon-player [data-tip]::before{display:none} }
+
+/* ---------- tombol umum ---------- */
+.gramofon-player .gp-btn{display:inline-flex;align-items:center;gap:8px;padding:9px 15px;border-radius:var(--gp-radius-s);background:rgba(255,255,255,.06);border:1px solid var(--gp-line);font-weight:500;transition:background .15s,border-color .15s;color:var(--gp-text)}
+.gramofon-player .gp-btn:hover{background:rgba(255,255,255,.11)}
+.gramofon-player .gp-btn:disabled{opacity:.45;cursor:not-allowed}
+.gramofon-player .gp-btn.primary{background:var(--gp-grad);border-color:transparent;color:var(--gp-accent-ink);font-weight:600}
+.gramofon-player .gp-btn.primary:hover{filter:brightness(1.08)}
+.gramofon-player .gp-btn.danger{color:#ff9aa9;border-color:rgba(232,99,122,.35)}
+.gramofon-player .gp-btn.danger:hover{background:rgba(232,99,122,.12)}
+.gramofon-player .gp-btn.sm{padding:6px 11px;font-size:12.5px}
+.gramofon-player .gp-ibtn{width:36px;height:36px;border-radius:50%;display:inline-grid;place-items:center;color:var(--gp-muted);transition:background .15s,color .15s;position:relative;flex:none}
+.gramofon-player .gp-ibtn:hover{background:rgba(255,255,255,.08);color:var(--gp-text)}
+.gramofon-player .gp-ibtn.on{color:var(--gp-accent)}
+.gramofon-player .gp-ibtn.on::after{content:"";position:absolute;bottom:3px;left:50%;width:4px;height:4px;border-radius:50%;background:var(--gp-accent);transform:translateX(-50%)}
+.gramofon-player .gp-ibtn:disabled{opacity:.35;cursor:not-allowed}
+.gramofon-player .gp-link{display:inline-flex;align-items:center;gap:4px;color:var(--gp-accent);font-weight:500;font-size:13px}
+.gramofon-player .gp-link:hover{text-decoration:underline}
+.gramofon-player .gp-chip{padding:6px 13px;border-radius:999px;border:1px solid var(--gp-line);color:var(--gp-muted);transition:.15s}
+.gramofon-player .gp-chip:hover{color:var(--gp-text);border-color:rgba(255,255,255,.28)}
+.gramofon-player .gp-chip.on{background:var(--gp-grad);color:var(--gp-accent-ink);border-color:transparent;font-weight:600}
+.gramofon-player .gp-chip.sm{padding:3px 10px;font-size:12px}
+.gramofon-player .gp-chips{display:flex;flex-wrap:wrap;gap:8px}
+.gramofon-player .gp-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:6px;background:rgba(10,8,16,.72);font-size:11px;font-weight:600}
+
+/* ==========================================================
+   TOPBAR
+   ========================================================== */
+.gramofon-player .gp-topbar{display:flex;align-items:center;gap:18px;padding:0 20px;border-bottom:1px solid var(--gp-line-soft);background:rgba(10,13,19,.92);backdrop-filter:blur(12px);position:relative;z-index:40}
+.gramofon-player .gp-brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px;letter-spacing:.2px;color:var(--gp-text);flex:none}
+.gramofon-player .gp-brand img{display:block;border-radius:50%;flex:none}
+.gramofon-player .gp-menu{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;min-width:0}
+.gramofon-player .gp-menu::-webkit-scrollbar{display:none}
+.gramofon-player .gp-menu-item{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:var(--gp-radius-s);color:var(--gp-muted);font-weight:500;white-space:nowrap;transition:background .15s,color .15s}
+.gramofon-player .gp-menu-item:hover{color:var(--gp-text);background:rgba(255,255,255,.05)}
+.gramofon-player .gp-menu-item.is-active{color:var(--gp-text);background:rgba(155,124,246,.18);box-shadow:inset 0 0 0 1px rgba(155,124,246,.42)}
+.gramofon-player .gp-menu-toggle{display:none}
+.gramofon-player .gp-menu-mobile{position:fixed;top:var(--gp-topbar-h);left:8px;right:8px;z-index:59;display:flex;flex-direction:column;gap:2px;background:var(--gp-panel-2);border:1px solid var(--gp-line);border-radius:var(--gp-radius-l);padding:8px;box-shadow:0 24px 60px -12px rgba(0,0,0,.75)}
+.gramofon-player .gp-menu-mobile .gp-menu-item{padding:10px 12px}
+.gramofon-player .gp-top-actions{margin-left:auto;display:flex;align-items:center;gap:8px}
+
+/* Restyle komponen bersama (NotificationBell, ProfileMenu, ConfirmDialog,
+   .btn/.field global) SUPAYA cocok tema gelap Gramofon -- hanya berlaku
+   di dalam .gramofon-player. */
+.gramofon-player .iconbtn-bell,.gramofon-player .topbar-avatar{background:rgba(255,255,255,.07)}
+.gramofon-player .iconbtn-bell:hover{background:rgba(255,255,255,.13);color:var(--gp-text)}
+.gramofon-player .topbar-avatar{background:var(--gp-grad)}
+.gramofon-player .topbar-avatar span{color:var(--gp-accent-ink);font-weight:700}
+
+.gramofon-player .profile-menu{background:var(--gp-panel-2);border:1px solid var(--gp-line);border-radius:var(--gp-radius-l);box-shadow:0 26px 60px -14px rgba(0,0,0,.8);overflow:hidden;padding:8px;width:230px}
+.gramofon-player .profile-menu__header{padding:10px 10px 12px}
+.gramofon-player .profile-menu__name{color:var(--gp-text);font-size:13.5px}
+.gramofon-player .profile-menu__email{color:var(--gp-dim)}
+.gramofon-player .profile-menu__divider{background:var(--gp-line-soft);margin:2px 0 6px}
+.gramofon-player .profile-menu__item{display:flex;align-items:center;gap:11px;padding:10px 11px;border-radius:10px;font-size:13.5px;color:var(--gp-text);font-weight:500}
+.gramofon-player .profile-menu__item svg{width:16px;height:16px;flex:none;display:block;color:var(--gp-muted)}
+.gramofon-player .profile-menu__item:hover{background:rgba(255,255,255,.07)}
+.gramofon-player .profile-menu__item:hover svg{color:var(--gp-text)}
+.gramofon-player .profile-menu__item--danger{color:#ff9aa9}
+.gramofon-player .profile-menu__item--danger svg{color:#ff9aa9}
+.gramofon-player .profile-menu__item--danger:hover{background:rgba(232,99,122,.12)}
+
+/* Notifikasi: dipusatkan di layar sebagai panel (bukan dropdown pojok),
+   lengkap dengan backdrop peredup (pakai :has(), fallback aman kalau
+   browser belum mendukung -- panel tetap tampil, hanya tanpa backdrop). */
+.gramofon-player .notif-wrap:has(.notif-panel)::before{
+  content:"";position:fixed;inset:0;background:rgba(4,3,8,.6);backdrop-filter:blur(3px);z-index:230;
+}
+.gramofon-player .notif-panel{
+  position:fixed;top:50%;left:50%;right:auto;transform:translate(-50%,-50%);
+  width:min(420px,92vw);max-height:min(72vh,560px);display:flex;flex-direction:column;
+  background:var(--gp-panel-2);border:1px solid var(--gp-line);border-radius:var(--gp-radius-l);
+  box-shadow:0 40px 90px -20px rgba(0,0,0,.85);z-index:231;overflow:hidden;
+}
+.gramofon-player .notif-panel__head{padding:16px 18px;border-bottom:1px solid var(--gp-line-soft);font-weight:700;color:var(--gp-text);flex:none}
+.gramofon-player .notif-panel__list{flex:1;overflow-y:auto}
+.gramofon-player .notif-item{border-bottom:1px solid var(--gp-line-soft);padding:13px 18px}
+.gramofon-player .notif-item:hover{background:rgba(255,255,255,.05)}
+.gramofon-player .notif-item.is-unread{background:rgba(51,217,196,.06)}
+.gramofon-player .notif-item__sender{color:var(--gp-accent);font-weight:700}
+.gramofon-player .notif-item__date{color:var(--gp-dim)}
+.gramofon-player .notif-item__title{color:var(--gp-text)}
+.gramofon-player .notif-item__title::before{background:var(--gp-accent) !important}
+.gramofon-player .notif-item__msg{color:var(--gp-muted)}
+.gramofon-player .notif-badge{background:var(--gp-danger)}
+.gramofon-player .notif-detail-backdrop{background:rgba(4,3,8,.6);backdrop-filter:blur(3px);z-index:240}
+.gramofon-player .notif-detail-card{background:var(--gp-panel-2);border:1px solid var(--gp-line);border-radius:var(--gp-radius-l);box-shadow:0 40px 90px -20px rgba(0,0,0,.85)}
+.gramofon-player .notif-detail-card__head{border-color:var(--gp-line-soft)}
+.gramofon-player .notif-detail-card__sender{color:var(--gp-accent)}
+.gramofon-player .notif-detail-card__foot{border-color:var(--gp-line-soft)}
+.gramofon-player .notif-link{color:var(--gp-accent)}
+
+/* Dialog konfirmasi & elemen form global -- diselaraskan ke tema gelap. */
+.gramofon-player .confirm-backdrop{background:rgba(4,3,8,.62);backdrop-filter:blur(4px);z-index:210}
+.gramofon-player .confirm-card{background:var(--gp-panel-2);border:1px solid var(--gp-line);border-radius:var(--gp-radius-l);box-shadow:0 40px 90px -20px rgba(0,0,0,.85)}
+.gramofon-player .confirm-card h3{color:var(--gp-text);font-weight:700}
+.gramofon-player .confirm-card p{color:var(--gp-muted)}
+.gramofon-player .btn{border-radius:var(--gp-radius-s);font-weight:600}
+.gramofon-player .btn--primary{background:var(--gp-grad);color:var(--gp-accent-ink)}
+.gramofon-player .btn--ghost{background:rgba(255,255,255,.05);color:var(--gp-muted);border:1px solid var(--gp-line)}
+.gramofon-player .btn--ghost:hover{color:var(--gp-text);background:rgba(255,255,255,.09)}
+.gramofon-player .btn--danger{color:#ff9aa9;border-color:rgba(232,99,122,.4)}
+.gramofon-player .field label{color:var(--gp-muted)}
+.gramofon-player .field input,.gramofon-player .field textarea{background:var(--gp-bg-2);border:1px solid var(--gp-line);color:var(--gp-text);border-radius:var(--gp-radius-s)}
+.gramofon-player .field input:focus,.gramofon-player .field textarea:focus{outline-color:var(--gp-accent)}
+.gramofon-player .hint-text{color:var(--gp-dim)}
+.gramofon-player .user-picker-list{border-color:var(--gp-line-soft)}
+.gramofon-player .user-picker-row:hover{background:rgba(255,255,255,.06)}
+.gramofon-player .addmenu-item:hover{background:rgba(255,255,255,.06)}
+.gramofon-player .segmented{background:var(--gp-bg-2);border-color:var(--gp-line)}
+.gramofon-player .segmented__btn{color:var(--gp-muted)}
+.gramofon-player .segmented__btn.is-active{background:var(--gp-grad);color:var(--gp-accent-ink)}
+
+/* ==========================================================
+   AREA UTAMA
+   ========================================================== */
+.gramofon-player .gp-view{min-height:0;overflow:hidden;position:relative}
+.gramofon-player .gp-stage-layout{height:100%;display:grid;grid-template-columns:minmax(0,1fr) clamp(300px,27vw,380px)}
+.gramofon-player .gp-stage{padding:22px clamp(16px,2.4vw,32px);overflow:auto;min-height:0;display:flex;flex-direction:column}
+.gramofon-player .gp-panel{border-left:1px solid var(--gp-line-soft);background:var(--gp-bg-2);display:flex;flex-direction:column;min-height:0;min-width:0}
+.gramofon-player .gp-scroll-page{height:100%;overflow:auto;padding:24px clamp(16px,3.2vw,40px) 44px;scrollbar-color:var(--gp-line) transparent}
+.gramofon-player .gp-stage::-webkit-scrollbar,.gramofon-player .gp-scroll-page::-webkit-scrollbar,.gramofon-player .gp-plist::-webkit-scrollbar,.gramofon-player .gp-pl-rows::-webkit-scrollbar,.gramofon-player .gp-table-wrap::-webkit-scrollbar{width:9px;height:9px}
+.gramofon-player .gp-stage::-webkit-scrollbar-track,.gramofon-player .gp-scroll-page::-webkit-scrollbar-track,.gramofon-player .gp-plist::-webkit-scrollbar-track,.gramofon-player .gp-pl-rows::-webkit-scrollbar-track,.gramofon-player .gp-table-wrap::-webkit-scrollbar-track{background:transparent}
+.gramofon-player .gp-stage::-webkit-scrollbar-thumb,.gramofon-player .gp-scroll-page::-webkit-scrollbar-thumb,.gramofon-player .gp-plist::-webkit-scrollbar-thumb,.gramofon-player .gp-pl-rows::-webkit-scrollbar-thumb,.gramofon-player .gp-table-wrap::-webkit-scrollbar-thumb{background:var(--gp-line);border-radius:8px}
+
+/* ---------- layar video: penuh, hanya bingkai tipis di tepi ---------- */
+.gramofon-player .gp-screen{position:relative;flex:1;min-height:0;width:100%;border-radius:var(--gp-radius-l);overflow:hidden;background:#000;box-shadow:0 0 0 1px var(--gp-line-soft);display:flex}
+.gramofon-player .gp-screen video{width:100%;height:100%;display:block;object-fit:contain;background:#000;margin:auto}
+.gramofon-player .gp-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--gp-dim);background:repeating-linear-gradient(45deg,var(--gp-bg) 0 14px,var(--gp-bg-2) 14px 28px);text-align:center;padding:12px}
+.gramofon-player .gp-empty .gp-ic{width:34px;height:34px}
+.gramofon-player .gp-empty b{color:var(--gp-muted);font-weight:600}
+/* Overlay play besar DIHAPUS untuk desktop (permintaan) */
+.gramofon-player .gp-bigplay{display:none}
+
+/* ---------- audio only: disc berputar ---------- */
+.gramofon-player .gp-audio-stage{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;height:100%}
+.gramofon-player .gp-disc-wrap{--d:clamp(170px,32vh,280px);position:relative;width:var(--d);height:var(--d);display:grid;place-items:center;flex:none}
+.gramofon-player .gp-disc{position:relative;width:100%;height:100%;border-radius:50%;background:repeating-radial-gradient(circle at 50% 50%,#05070c 0 2px,#0d1018 2px 4px);box-shadow:0 0 0 1px rgba(255,255,255,.08),0 24px 60px -10px rgba(0,0,0,.7);animation:gp-spin 9s linear infinite;animation-play-state:paused}
+.gramofon-player.gp-is-playing .gp-disc{animation-play-state:running}
+@keyframes gp-spin{to{transform:rotate(360deg)}}
+.gramofon-player .gp-disc-label{position:absolute;inset:33%;border-radius:50%;background:var(--gp-grad);box-shadow:inset 0 0 0 3px rgba(0,0,0,.3)}
+.gramofon-player .gp-disc-hole{position:absolute;left:50%;top:50%;width:6%;height:6%;margin:-3% 0 0 -3%;border-radius:50%;background:var(--gp-bg);box-shadow:0 0 0 2px rgba(0,0,0,.45)}
+.gramofon-player .gp-notes-fx{position:relative;z-index:1;width:min(280px,80%);height:52px;pointer-events:none;-webkit-mask-image:linear-gradient(to top,#000 60%,transparent 100%);mask-image:linear-gradient(to top,#000 60%,transparent 100%)}
+.gramofon-player .gp-notes-fx .gp-note{position:absolute;bottom:0;left:calc(3% + (var(--i) * 11%));width:14px;height:14px;color:var(--gp-accent);opacity:0;animation:gp-note-float 3s ease-in infinite;animation-delay:calc(var(--i) * -.34s);animation-play-state:paused}
+.gramofon-player.gp-is-playing .gp-notes-fx .gp-note{animation-play-state:running}
+@keyframes gp-note-float{0%{transform:translateY(4px) rotate(-8deg) scale(.5);opacity:0}12%{opacity:.95}55%{transform:translateY(-26px) rotate(10deg) scale(1);opacity:.85}100%{transform:translateY(-50px) rotate(-6deg) scale(.65);opacity:0}}
+
+/* ---------- panel playlist ---------- */
+.gramofon-player .gp-panel-head{display:flex;gap:8px;align-items:center;padding:14px 14px 8px}
+.gramofon-player .gp-select-wrap{position:relative;flex:1;min-width:0}
+.gramofon-player .gp-select-wrap select{width:100%;appearance:none;background-color:var(--gp-panel);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238a93a8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;border:1px solid var(--gp-line);border-radius:12px;padding:10px 30px 10px 13px;font-weight:600;cursor:pointer;color:var(--gp-text);transition:border-color .15s}
+.gramofon-player .gp-select-wrap select:hover{border-color:var(--gp-accent)}
+.gramofon-player .gp-select-wrap select option{background:var(--gp-panel);color:var(--gp-text)}
+.gramofon-player .gp-panel-addbtn{width:38px;height:38px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid var(--gp-line);display:grid;place-items:center;flex:none;color:var(--gp-muted)}
+.gramofon-player .gp-panel-addbtn:hover{color:var(--gp-text);background:rgba(255,255,255,.11)}
+.gramofon-player .gp-panel-newrow{display:flex;gap:6px;padding:0 14px 10px}
+.gramofon-player .gp-panel-newrow input{flex:1;background:var(--gp-bg-2);border:1px solid var(--gp-line);border-radius:10px;padding:8px 11px;color:var(--gp-text)}
+.gramofon-player .gp-panel-newrow input:focus{outline:2px solid var(--gp-accent);outline-offset:1px}
+.gramofon-player .gp-panel-sub{display:flex;justify-content:space-between;align-items:center;padding:2px 16px 8px;color:var(--gp-muted);font-size:12.5px;gap:8px}
+.gramofon-player .gp-plist{overflow:auto;flex:1;margin:0;padding:8px;list-style:none;min-height:0}
+.gramofon-player .gp-pl-item{display:flex;align-items:stretch;border-radius:12px;position:relative}
+.gramofon-player .gp-pl-item:hover{background:rgba(255,255,255,.04)}
+.gramofon-player .gp-pl-item.is-current{background:rgba(155,124,246,.14);box-shadow:inset 0 0 0 1px rgba(155,124,246,.4)}
+.gramofon-player .gp-pl-item.is-dragging{opacity:.4}
+.gramofon-player .gp-pl-item.is-dragover{box-shadow:inset 0 2px 0 var(--gp-accent)}
+.gramofon-player .gp-drag-handle{width:20px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--gp-dim);cursor:grab;touch-action:none}
+.gramofon-player .gp-drag-handle:active{cursor:grabbing}
+.gramofon-player .gp-pl-main{flex:1;min-width:0;display:flex;align-items:center;gap:10px;padding:8px;text-align:left;border-radius:10px}
+.gramofon-player .gp-pl-text{flex:1;min-width:0;display:flex;flex-direction:column}
+.gramofon-player .gp-pl-text b{font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gramofon-player .gp-pl-text small{color:var(--gp-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gramofon-player .gp-empty-list{padding:26px 16px;text-align:center;color:var(--gp-muted);list-style:none;font-size:13px}
+.gramofon-player .gp-thumb{width:38px;height:38px;border-radius:10px;flex:none;position:relative;color:rgba(255,255,255,.92);background:var(--gp-grad);background-size:cover;background-position:center;display:grid;place-items:center;overflow:hidden}
+.gramofon-player .gp-thumb.has-img{background-image:var(--gp-img)}
+.gramofon-player .gp-thumb.has-img .gp-thumb-ic{display:none}
+.gramofon-player .gp-eq{display:none;gap:2px;align-items:flex-end;height:14px}
+.gramofon-player .gp-eq i{width:3px;height:100%;background:#fff;border-radius:2px;transform-origin:bottom;transform:scaleY(.35);animation:gp-eq .9s ease-in-out infinite;animation-play-state:paused}
+.gramofon-player .gp-eq i:nth-child(2){animation-delay:-.3s}
+.gramofon-player .gp-eq i:nth-child(3){animation-delay:-.6s}
+.gramofon-player.gp-is-playing .gp-pl-item.is-current .gp-eq{animation-play-state:running;display:flex}
+.gramofon-player .gp-pl-item.is-current .gp-eq{display:flex}
+.gramofon-player .gp-pl-item.is-current .gp-thumb .gp-thumb-ic{display:none}
+.gramofon-player .gp-pl-actions{display:flex;align-items:center;gap:2px;padding-right:4px}
+
+/* ---------- mini player mengambang ---------- */
+.gramofon-player .gp-mini-player{position:fixed;z-index:70;width:min(280px,calc(100% - 24px));bottom:calc(var(--gp-bottombar-h) + 16px);left:16px;background:var(--gp-panel);border:1px solid var(--gp-line);border-radius:var(--gp-radius-l);box-shadow:0 26px 60px -12px rgba(0,0,0,.8);overflow:hidden}
+.gramofon-player .gp-mini-head{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 10px;cursor:grab;touch-action:none;user-select:none}
+.gramofon-player .gp-mini-title{flex:1;min-width:0;font-weight:600;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gramofon-player .gp-mini-player .gp-screen{border-radius:0;box-shadow:none;width:100%;aspect-ratio:16/9;flex:none}
+.gramofon-player .gp-mini-player .gp-bigplay{display:none}
+.gramofon-player .gp-mini-player .gp-video-overlay{display:none !important}
+.gramofon-player .gp-mini-controls{display:flex;align-items:center;justify-content:center;padding:6px 10px 8px}
+@media (max-width:820px){
+  .gramofon-player .gp-mini-player{left:50%;transform:translateX(-50%)}
+}
+
+/* ---------- Manage Media ---------- */
+.gramofon-player .gp-page-head{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;margin-bottom:18px}
+.gramofon-player .gp-page-head h2{font-size:clamp(20px,2.2vw,25px);font-weight:700;letter-spacing:-.01em}
+.gramofon-player .gp-page-head p{color:var(--gp-muted);margin-top:4px;max-width:60ch}
+.gramofon-player .gp-manage-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:16px;margin-bottom:18px}
+.gramofon-player .gp-card{background:var(--gp-panel);border:1px solid var(--gp-line-soft);border-radius:var(--gp-radius-l);padding:18px;min-width:0}
+.gramofon-player .gp-card-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.gramofon-player .gp-card-title h3{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px}
+.gramofon-player .gp-storage-num b{font-size:28px;letter-spacing:-.02em;font-weight:700}
+.gramofon-player .gp-storage-num span{color:var(--gp-muted);margin-left:8px}
+.gramofon-player .gp-stack{display:flex;height:12px;border-radius:8px;overflow:hidden;background:rgba(255,255,255,.07);margin:12px 0}
+.gramofon-player .gp-stack i{display:block;height:100%}
+.gramofon-player .gp-seg-v{background:var(--gp-accent-2)}
+.gramofon-player .gp-seg-a{background:var(--gp-accent)}
+.gramofon-player .gp-legend{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:8px 16px}
+.gramofon-player .gp-legend li{display:flex;align-items:center;gap:8px;color:var(--gp-muted);font-size:13px}
+.gramofon-player .gp-legend b{margin-left:auto;color:var(--gp-text);font-weight:600}
+.gramofon-player .gp-dot{width:9px;height:9px;border-radius:50%;flex:none}
+.gramofon-player .gp-dot.v{background:var(--gp-accent-2)}
+.gramofon-player .gp-dot.a{background:var(--gp-accent)}
+.gramofon-player .gp-dot.f{background:rgba(255,255,255,.12)}
+.gramofon-player .gp-pl-rows{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;max-height:230px;overflow:auto}
+.gramofon-player .gp-pl-row{display:flex;align-items:center;gap:10px;padding:8px 4px 8px 8px;border-radius:10px;cursor:pointer}
+.gramofon-player .gp-pl-row:hover{background:rgba(255,255,255,.04)}
+.gramofon-player .gp-pl-row .gp-info{flex:1;min-width:0}
+.gramofon-player .gp-pl-row b{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.gramofon-player .gp-pl-row small{color:var(--gp-muted);font-size:12px}
+.gramofon-player .gp-pl-row.is-active{background:rgba(155,124,246,.16);box-shadow:inset 0 0 0 1px rgba(155,124,246,.4)}
+.gramofon-player .gp-new-playlist{display:flex;gap:8px;margin-top:10px}
+.gramofon-player .gp-new-playlist input{flex:1;background:var(--gp-bg-2);border:1px solid var(--gp-line);border-radius:10px;padding:9px 12px;color:var(--gp-text)}
+.gramofon-player .gp-new-playlist input:focus{outline:2px solid var(--gp-accent);outline-offset:1px}
+
+.gramofon-player .gp-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.gramofon-player .gp-field{display:flex;align-items:center;gap:8px;background:var(--gp-bg-2);border:1px solid var(--gp-line);border-radius:10px;padding:0 12px;color:var(--gp-muted)}
+.gramofon-player .gp-field input{background:none;border:0;outline:0;padding:9px 0;min-width:0;width:100%;color:var(--gp-text)}
+.gramofon-player .gp-field:focus-within{border-color:var(--gp-accent)}
+.gramofon-player .gp-field.grow{flex:1;min-width:180px}
+.gramofon-player .gp-select-plain{appearance:none;background-color:var(--gp-bg-2);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238a93a8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;border:1px solid var(--gp-line);border-radius:10px;padding:9px 28px 9px 12px;cursor:pointer;color:var(--gp-text)}
+.gramofon-player .gp-select-plain option{background:var(--gp-panel)}
+
+.gramofon-player .gp-table-wrap{overflow:auto;border:1px solid var(--gp-line-soft);border-radius:var(--gp-radius-l)}
+.gramofon-player table.gp-table{width:100%;border-collapse:collapse;font-size:13px}
+.gramofon-player .gp-table th{text-align:left;padding:11px 12px;color:var(--gp-muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--gp-line-soft);white-space:nowrap;background:var(--gp-bg-2)}
+.gramofon-player .gp-table th.gp-th-acts{text-align:right}
+.gramofon-player .gp-table td{padding:10px 12px;border-bottom:1px solid var(--gp-line-soft);vertical-align:middle}
+.gramofon-player .gp-table tr:last-child td{border-bottom:0}
+.gramofon-player .gp-table tr:hover td{background:rgba(255,255,255,.03)}
+.gramofon-player .gp-table tr.is-dragging td{opacity:.4}
+.gramofon-player .gp-table tr.is-dragover td{box-shadow:inset 0 2px 0 var(--gp-accent)}
+.gramofon-player .gp-title-cell{display:flex;align-items:center;gap:10px;min-width:0}
+.gramofon-player .gp-title-cell .gp-t-name{font-weight:600;max-width:340px}
+.gramofon-player .gp-tag{display:inline-flex;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600}
+.gramofon-player .gp-tag.video{background:rgba(155,124,246,.16);color:#c7bcff}
+.gramofon-player .gp-tag.audio{background:rgba(51,217,196,.14);color:#8ff2e3}
+.gramofon-player .gp-acts{white-space:nowrap;text-align:right}
+.gramofon-player .gp-acts-inner{display:inline-flex;gap:4px;justify-content:flex-end;align-items:center}
+.gramofon-player .gp-table-empty{padding:34px;text-align:center;color:var(--gp-muted)}
+.gramofon-player .gp-bulkbar{display:flex;align-items:center;gap:10px;margin-bottom:10px;color:var(--gp-accent);font-size:13px;font-weight:600}
+.gramofon-player .gp-drag-col{width:26px}
+
+/* ---------- Explore ---------- */
+.gramofon-player .gp-cat-chips{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+.gramofon-player .gp-cat-manage{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+.gramofon-player .gp-cat-tag{display:inline-flex;align-items:center;gap:6px;padding:5px 6px 5px 12px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid var(--gp-line);font-size:12.5px}
+.gramofon-player .gp-cat-tag button{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;color:var(--gp-dim)}
+.gramofon-player .gp-cat-tag button:hover{color:var(--gp-danger);background:rgba(232,99,122,.15)}
+.gramofon-player .gp-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-top:16px}
+.gramofon-player .gp-xcard{position:relative;display:flex;flex-direction:column;gap:8px;border-radius:var(--gp-radius-m)}
+.gramofon-player .gp-xthumb{position:relative;display:block;width:100%;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:var(--gp-grad);background-size:cover;background-position:center;box-shadow:0 0 0 1px var(--gp-line-soft);transition:transform .18s,box-shadow .18s;cursor:pointer}
+.gramofon-player .gp-xthumb:hover{transform:translateY(-2px);box-shadow:0 0 0 1px var(--gp-line),0 14px 30px -12px rgba(0,0,0,.8)}
+.gramofon-player .gp-xcard.is-current .gp-xthumb{box-shadow:0 0 0 2px var(--gp-accent-2)}
+.gramofon-player .gp-type-badge{position:absolute;left:8px;top:8px;width:24px;height:24px;border-radius:8px;background:rgba(4,3,8,.72);display:grid;place-items:center;color:#fff}
+.gramofon-player .gp-type-badge .gp-ic{width:13px;height:13px}
+.gramofon-player .gp-xplay{position:absolute;left:50%;top:50%;width:42px;height:42px;margin:-21px 0 0 -21px;border-radius:50%;display:grid;place-items:center;background:rgba(4,3,8,.55);backdrop-filter:blur(6px);opacity:0;transition:opacity .15s;color:#fff}
+.gramofon-player .gp-xthumb:hover .gp-xplay{opacity:1}
+.gramofon-player .gp-xbody b{font-weight:600;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:13px}
+.gramofon-player .gp-xbody small{display:block;color:var(--gp-muted);margin-top:2px;font-size:12px}
+.gramofon-player .gp-xacts{display:flex;justify-content:space-between;align-items:center;margin-top:4px}
+
+/* ==========================================================
+   BOTTOM BAR
+   ========================================================== */
+.gramofon-player .gp-bottombar{display:grid;grid-template-columns:minmax(170px,1fr) minmax(280px,2fr) minmax(170px,1fr);align-items:center;gap:16px;padding:0 20px;background:var(--gp-bg-2);border-top:1px solid var(--gp-line-soft);position:relative;z-index:30;padding-bottom:env(safe-area-inset-bottom)}
+.gramofon-player .gp-np{display:flex;align-items:center;gap:12px;min-width:0}
+.gramofon-player .gp-np-thumb{width:46px;height:46px;border-radius:12px;flex:none;background:var(--gp-grad);background-size:cover;background-position:center;box-shadow:0 0 0 1px var(--gp-line-soft);font-size:18px;display:grid;place-items:center}
+.gramofon-player .gp-np-thumb.has-img .gp-np-ic{display:none}
+.gramofon-player .gp-np-text{min-width:0;display:flex;flex-direction:column}
+.gramofon-player .gp-np-title{font-weight:600;font-size:13px}
+.gramofon-player .gp-np-sub{color:var(--gp-muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gramofon-player .gp-np-sub em{font-style:normal;color:var(--gp-text)}
+.gramofon-player .gp-transport{display:flex;flex-direction:column;gap:4px;min-width:0}
+.gramofon-player .gp-controls{display:flex;align-items:center;justify-content:center;gap:2px}
+.gramofon-player .gp-btn-play{width:42px;height:42px;background:var(--gp-grad);color:var(--gp-accent-ink);margin:0 6px}
+.gramofon-player .gp-btn-play:hover{filter:brightness(1.08)}
+.gramofon-player .gp-seek{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px}
+.gramofon-player .gp-time{font-size:11.5px;color:var(--gp-muted);font-variant-numeric:tabular-nums;min-width:34px}
+.gramofon-player .gp-seek .gp-time:first-child{text-align:right}
+.gramofon-player .gp-extras{display:flex;justify-content:flex-end;align-items:center;gap:8px}
+.gramofon-player .gp-vol-group{display:flex;align-items:center;gap:6px}
+.gramofon-player .gp-vol-num{font-size:11px;color:var(--gp-muted);width:30px;text-align:right;font-variant-numeric:tabular-nums;flex:none}
+.gramofon-player .gp-vol-slider{width:60px}
+.gramofon-player .gp-sleep-btn{width:auto;padding:0 10px;gap:6px;display:inline-flex;align-items:center;border-radius:18px;font-size:12px;font-variant-numeric:tabular-nums}
+
+.gramofon-player input[type=range]{-webkit-appearance:none;appearance:none;height:16px;background:transparent;cursor:pointer;width:100%;margin:0}
+.gramofon-player input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:4px;background:rgba(255,255,255,.14)}
+.gramofon-player input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:#fff;margin-top:-4px;box-shadow:0 0 0 0 rgba(51,217,196,.25);transition:box-shadow .15s}
+.gramofon-player input[type=range]:hover::-webkit-slider-thumb{box-shadow:0 0 0 5px rgba(51,217,196,.25)}
+.gramofon-player input[type=range]:disabled{opacity:.4;cursor:not-allowed}
+.gramofon-player input[type=number]{background:var(--gp-bg-2);border:1px solid var(--gp-line);border-radius:10px;padding:8px 6px;text-align:center;outline:0;width:60px}
+.gramofon-player input[type=number]:focus{outline:2px solid var(--gp-accent);outline-offset:1px}
+
+/* ---------- dropdown ekstra (sleep) ---------- */
+.gramofon-player .gp-dd-wrap{position:relative}
+.gramofon-player .gp-dropdown{position:absolute;bottom:calc(100% + 10px);right:0;width:240px;background:var(--gp-panel-2);border:1px solid var(--gp-line);border-radius:var(--gp-radius-l);box-shadow:0 24px 60px -12px rgba(0,0,0,.75);z-index:60;overflow:hidden;padding:14px}
+.gramofon-player .gp-dropdown b{display:block;margin-bottom:10px}
+.gramofon-player .gp-sleep-quick{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.gramofon-player .gp-sleep-custom{display:flex;align-items:center;gap:8px}
+.gramofon-player .gp-dd-sep{height:1px;background:var(--gp-line-soft);margin:10px 0}
+
+/* ---------- Context menu video (klik kanan) ---------- */
+.gramofon-player .gp-ctxmenu{position:fixed;z-index:500;min-width:210px;background:var(--gp-panel-2);border:1px solid var(--gp-line);border-radius:var(--gp-radius-m);box-shadow:0 30px 70px -20px rgba(0,0,0,.85);padding:6px;font-size:13px}
+.gramofon-player .gp-ctxmenu button{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border-radius:9px;text-align:left;color:var(--gp-text)}
+.gramofon-player .gp-ctxmenu button:hover{background:rgba(255,255,255,.08)}
+.gramofon-player .gp-ctxmenu button.on{color:var(--gp-accent)}
+.gramofon-player .gp-ctx-sep{height:1px;background:var(--gp-line-soft);margin:5px 6px}
+.gramofon-player .gp-ctx-label{padding:7px 12px 3px;color:var(--gp-dim);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em}
+.gramofon-player .gp-ctx-sub{display:flex;flex-wrap:wrap;gap:5px;padding:2px 10px 8px}
+.gramofon-player .gp-ctx-sub button{width:auto;padding:5px 10px;border-radius:8px;background:rgba(255,255,255,.05);font-size:12px}
+.gramofon-player .gp-ctx-sub button.on{background:var(--gp-grad);color:var(--gp-accent-ink);font-weight:700}
+
+/* ---------- Overlay kontrol di dalam video (mobile) ---------- */
+.gramofon-player .gp-video-overlay{position:absolute;inset:0;display:none;flex-direction:column;justify-content:space-between;background:linear-gradient(to bottom,rgba(4,5,10,.5),transparent 24%,transparent 68%,rgba(4,5,10,.6));opacity:0;pointer-events:none;transition:opacity .2s ease;z-index:8}
+.gramofon-player .gp-video-overlay.show{opacity:1;pointer-events:auto}
+.gramofon-player .gp-ov-top{display:flex;justify-content:flex-end;padding:10px}
+.gramofon-player .gp-ov-mid{flex:1;display:flex;align-items:center;justify-content:center;gap:22px}
+.gramofon-player .gp-ov-mid button{color:#fff;width:50px;height:50px;border-radius:50%;display:grid;place-items:center;background:rgba(6,8,14,.4)}
+.gramofon-player .gp-ov-mid button:active{background:rgba(6,8,14,.6)}
+.gramofon-player .gp-ov-mid button.gp-ov-play{width:62px;height:62px;background:rgba(6,8,14,.55)}
+.gramofon-player .gp-ov-bottom{padding:8px 12px 12px;display:flex;flex-direction:column;gap:8px}
+.gramofon-player .gp-ov-seek{display:flex;align-items:center;gap:8px}
+.gramofon-player .gp-ov-seek .gp-time{color:#fff}
+.gramofon-player .gp-ov-row2{display:flex;align-items:center;justify-content:space-between}
+.gramofon-player .gp-ov-row2 .gp-ov-side{display:flex;align-items:center;gap:6px}
+.gramofon-player .gp-ov-row2 button{color:#fff;width:32px;height:32px;border-radius:50%;display:grid;place-items:center}
+.gramofon-player .gp-ov-row2 button:hover{background:rgba(255,255,255,.15)}
+.gramofon-player .gp-ov-row2 button.on,.gramofon-player .gp-ov-mid button.on{color:var(--gp-accent)}
+.gramofon-player .gp-ov-vol{width:64px}
+.gramofon-player .gp-ov-title{color:#fff;font-size:12.5px;font-weight:600;padding:0 40px 0 4px}
+
+/* ==========================================================
+   RESPONSIF
+   ========================================================== */
+@media (max-width:1100px){
+  .gramofon-player .gp-manage-grid{grid-template-columns:1fr}
+}
+@media (max-width:820px){
+  .gramofon-player{--gp-topbar-h:54px;--gp-bottombar-h:64px}
+  .gramofon-player .gp-topbar{gap:10px;padding:0 12px}
+  .gramofon-player .gp-brand{font-size:15px}
+  .gramofon-player .gp-menu-toggle{display:inline-grid}
+  .gramofon-player .gp-menu{display:none}
+  .gramofon-player .gp-stage-layout{display:block;overflow:auto}
+  .gramofon-player .gp-stage-layout .gp-stage{overflow:visible;padding:0}
+  .gramofon-player .gp-screen{border-radius:0;aspect-ratio:16/9;flex:none;min-height:0;height:auto}
+  .gramofon-player .gp-stage-layout .gp-panel{height:min(460px,60dvh);border-left:0;border-top:1px solid var(--gp-line-soft)}
+
+  /* Kontrol utama pindah ke overlay dalam video; sisakan Shuffle/Repeat/Timer saja di bottombar */
+  .gramofon-player .gp-video-overlay{display:flex}
+  .gramofon-player .gp-bottombar{grid-template-columns:1fr auto;gap:8px;padding:0 10px}
+  .gramofon-player .gp-np{display:none}
+  .gramofon-player .gp-transport{display:none}
+  .gramofon-player .gp-extras{justify-content:flex-start;grid-column:1 / -1}
+  .gramofon-player .gp-extras .gp-vol-group{display:none}
+  .gramofon-player .gp-ibtn{width:34px;height:34px}
+  .gramofon-player .gp-manage-grid{grid-template-columns:1fr}
+  .gramofon-player .gp-mini-player{width:min(240px,calc(100% - 24px))}
+}

@@ -14,7 +14,7 @@ export async function POST(request) {
       return NextResponse.json({ error: "Bukan admin." }, { status: 403 });
     }
 
-    const { publicId, bytes, resourceType, format, secureUrl, title, durationSeconds } =
+    const { publicId, bytes, resourceType, format, secureUrl, title, durationSeconds, category } =
       await request.json();
     if (!publicId || !bytes || !resourceType || !secureUrl) {
       return NextResponse.json({ error: "Data upload tidak lengkap." }, { status: 400 });
@@ -52,6 +52,10 @@ export async function POST(request) {
         format: format || null,
         bytes,
         durationSeconds: durationSeconds || null,
+        // Kategori opsional (dikelola admin lewat menu Explore) --
+        // dibatasi panjangnya sebagai jaga-jaga, disimpan null kalau
+        // pengguna tidak memilih kategori apa pun.
+        category: typeof category === "string" && category.trim() ? category.trim().slice(0, 60) : null,
         url: secureUrl,
         addedBy: decoded.uid,
         createdAt: new Date(),

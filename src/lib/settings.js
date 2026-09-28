@@ -60,6 +60,22 @@ export async function setExploreLimitMB(mb) {
   await setDoc(SETTINGS_DOC, { exploreLimitMB: mb }, { merge: true });
 }
 
+// ---- Kategori Explore ----
+// Daftar kategori yang bisa dikelola admin (mis. "Musik", "Podcast",
+// "Film Pendek"). Kalau daftar ini kosong, UI kategori disembunyikan
+// total untuk pengguna biasa (lihat /app/page.js) — admin tetap melihat
+// panel kelola kategori supaya bisa membuat kategori pertama.
+export async function getExploreCategories() {
+  const snap = await getDoc(SETTINGS_DOC);
+  if (!snap.exists()) return [];
+  const list = snap.data().exploreCategories;
+  return Array.isArray(list) ? list : [];
+}
+
+export async function setExploreCategories(list) {
+  await setDoc(SETTINGS_DOC, { exploreCategories: list }, { merge: true });
+}
+
 // ---- Kuota penyimpanan per akun ----
 // Batas EFEKTIF seorang user = users/{uid}.storageLimitMB (kalau diset
 // khusus lewat Kelola Pengguna) ATAU settings/app.defaultStorageLimitMB

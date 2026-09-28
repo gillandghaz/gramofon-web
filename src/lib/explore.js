@@ -14,7 +14,9 @@ export async function listExploreMedia() {
 
 // Sama alurnya dengan uploadMediaFile di media.js, tapi lewat endpoint
 // /api/explore/* (admin-only, akun Cloudinary terpisah, tanpa cek kuota).
-export async function uploadExploreFile(file, title, onProgress) {
+// Parameter "category" opsional -- dikirim ke confirm-upload supaya
+// tersimpan di dokumen exploreMedia (dipakai fitur filter kategori).
+export async function uploadExploreFile(file, title, onProgress, category) {
   const idToken = await auth.currentUser.getIdToken();
 
   const signRes = await fetch("/api/explore/sign-upload", {
@@ -63,6 +65,7 @@ export async function uploadExploreFile(file, title, onProgress) {
       secureUrl: cloudinaryResult.secure_url,
       durationSeconds: cloudinaryResult.duration || null,
       title: title || file.name,
+      category: category || null,
     }),
   });
   const confirmBody = await confirmRes.json().catch(() => ({}));

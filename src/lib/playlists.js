@@ -53,3 +53,10 @@ export async function addTrackToPlaylist(playlistId, mediaId) {
 export async function removeTrackFromPlaylist(playlistId, mediaId) {
   await updateDoc(doc(db, "playlists", playlistId), { trackIds: arrayRemove(mediaId) });
 }
+
+// Menimpa TOTAL urutan trackIds -- dipakai fitur drag-untuk-mengurutkan.
+// Dikirim sebagai array lengkap (bukan arrayUnion/arrayRemove) karena
+// yang berubah adalah URUTANNYA, bukan isinya.
+export async function reorderPlaylistTracks(playlistId, orderedTrackIds) {
+  await updateDoc(doc(db, "playlists", playlistId), { trackIds: orderedTrackIds });
+}

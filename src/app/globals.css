@@ -1650,6 +1650,268 @@ html[data-reduce-motion="true"] * {
   line-height: 1;
 }
 
+/* ==============================================================
+   /app: kerangka pemutar (topbar + view + bottombar), direkolorkan
+   pakai variabel Gramofon yang sudah ada -- struktur & fitur transport
+   (shuffle/repeat/skip10/volume-boost/sleep timer) meniru referensi
+   desain yang diberikan.
+   ============================================================== */
+.player-shell {
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  padding-top: env(safe-area-inset-top);
+}
+.view {
+  flex: 1;
+  overflow-y: auto;
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 24px 16px 24px;
+}
+
+.topbar {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 20px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-soft);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.brand-name {
+  font-weight: 700;
+  font-size: 15px;
+}
+.topbar__nav--desktop {
+  margin: 0 auto;
+}
+.topbar__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+.topbar__menu-toggle {
+  display: none;
+}
+.topbar__mobile-menu {
+  position: absolute;
+  top: 100%;
+  left: 12px;
+  right: 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-elevated);
+  padding: 6px;
+  z-index: 200;
+}
+.topbar__mobile-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 10px 12px;
+  border-radius: var(--radius-s);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+.topbar__mobile-menu-item:hover {
+  background: var(--bg-hover);
+}
+.topbar__mobile-menu-item.is-active {
+  color: var(--accent-teal);
+  background: var(--accent-grad-soft);
+}
+
+/* ---- Bottombar: now-playing + transport lengkap + seek ---- */
+.bottombar {
+  flex-shrink: 0;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-soft);
+  padding: 8px 20px;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bb-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.np {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 120px;
+  max-width: 220px;
+  flex-shrink: 1;
+  overflow: hidden;
+}
+.np-thumb {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--accent-grad);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+}
+.np-text {
+  min-width: 0;
+  overflow: hidden;
+}
+.np-title {
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.np-sub {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 auto;
+  flex-shrink: 0;
+}
+.tbtn {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.tbtn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.tbtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.tbtn.is-on {
+  color: var(--accent-teal);
+}
+.tbtn-primary {
+  width: 38px;
+  height: 38px;
+  background: var(--accent-grad);
+  color: #0a0d13;
+}
+.tbtn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  background: var(--accent-grad);
+}
+.tbtn-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  min-width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent-teal);
+  color: #0a0d13;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 12px;
+  text-align: center;
+}
+.extras {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.dd-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.vol-slider {
+  width: 80px;
+}
+.sleep-pop {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  right: 0;
+  width: 200px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  padding: 14px;
+  box-shadow: var(--shadow-elevated);
+  z-index: 120;
+}
+.sleep-quick {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.chip {
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 11.5px;
+}
+.chip:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-teal);
+}
+
+.seek-row {
+  gap: 10px;
+}
+.bb-time {
+  font-family: var(--font-mono, monospace);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+  min-width: 32px;
+  text-align: center;
+}
+.seek-row .seekbar {
+  flex: 1;
+}
+
 @media (max-width: 480px) {
   .dashboard-shell {
     padding: 14px 10px;
@@ -1819,5 +2081,41 @@ html[data-reduce-motion="true"] * {
   }
   .app-shell {
     padding-bottom: 170px;
+  }
+
+  /* ---- /app di HP: navigasi pindah ke menu-toggle + dropdown, bukan
+     baris pill di topbar (supaya topbar tidak sesak) ---- */
+  .topbar__nav--desktop {
+    display: none;
+  }
+  .topbar__menu-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--bg-elevated);
+    border: none;
+    color: var(--text-secondary);
+    font-size: 15px;
+    cursor: pointer;
+    order: -1;
+    margin-right: auto;
+  }
+  .np-sub {
+    display: none;
+  }
+  .np {
+    max-width: 120px;
+  }
+  .vol-slider {
+    display: none;
+  }
+  .bb-row {
+    gap: 8px;
+  }
+  .transport {
+    gap: 0;
   }
 }
