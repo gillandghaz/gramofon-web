@@ -9,7 +9,13 @@ import ProfileMenu from "@/components/ProfileMenu";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Logo from "@/components/Logo";
 import { listMyMedia, uploadMediaFile, deleteMedia, formatBytes } from "@/lib/media";
-import { listExploreMedia, uploadExploreFile, deleteExploreMedia } from "@/lib/explore";
+import {
+  listExploreMedia,
+  uploadExploreFile,
+  deleteExploreMedia,
+  uploadExploreThumbnail,
+  renameExploreCategory,
+} from "@/lib/explore";
 import {
   getDefaultStorageLimitMB,
   isExploreEnabled,
@@ -48,16 +54,21 @@ function formatTime(s) {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
-// Ambil frame pertama video Cloudinary sebagai thumbnail JPG, langsung
-// dari URL yang sudah ada (tanpa perlu request/endpoint tambahan).
-function videoThumbUrl(m) {
-  if (!m || m.resourceType !== "video" || !m.url) return null;
+// Thumbnail: gambar buatan admin (thumbUrl) kalau ada, kalau tidak
+// ambil frame pertama video Cloudinary langsung dari URL yang sudah ada.
+function mediaThumb(m) {
+  if (!m) return null;
   try {
+    if (m.thumbUrl) return m.thumbUrl.replace("/upload/", "/upload/c_fill,w_480,h_270,q_auto,f_auto/");
+    if (m.resourceType !== "video" || !m.url) return null;
     return m.url.replace("/upload/", "/upload/so_0/").replace(/\.[a-zA-Z0-9]+(\?.*)?$/, ".jpg");
   } catch {
     return null;
   }
 }
+
+const AUDIO_BARS = 40;
+const PAGE_SIZE = 10;
 
 function isCoarsePointer() {
   return typeof window !== "undefined" && window.matchMedia && window.matchMedia("(pointer:coarse)").matches;
@@ -114,7 +125,12 @@ function AppInner() {
   const [sleepLabel, setSleepLabel] = useState("");
   const [sleepCustomNum, setSleepCustomNum] = useState("30");
   const [sleepCustomUnit, setSleepCustomUnit] = useState("menit");
-  const [videoLoop, setVideoLoop] = useState(false);
+  const [osd, setOsd] = useState(null);
+  const osdTimerRef = useRef(null);
+  const keyRef = useRef({});
+  const analyserRef = useRef(null);
+  const barsRef = useRef([]);
+  const tapRef = useRef({ time: 0, side: null, timer: null });
   const [playbackRate, setPlaybackRate] = useState(1);
   const playerRef = useRef(null);
   const gainRef = useRef(null);
@@ -167,7 +183,12 @@ function AppInner() {
   const [exploreActiveCategory, setExploreActiveCategory] = useState("all");
   const [exploreUploadCategory, setExploreUploadCategory] = useState("");
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [renamingCategory, setRenamingCategory] = useState(null); // {old,input}
+  const [thumbUploadingId, setThumbUploadingId] = useState(null);
+  const [thumbErr, setThumbErr] = useState("");
   const exploreFileInputRef = useRef(null);
+  const thumbFileInputRef = useRef(null);
+  const thumbTargetId = useRef(null);
 
   useEffect(() => {
     refresh();
@@ -303,7 +324,7 @@ function AppInner() {
     if (el) {
       el.src = item.url;
       el.playbackRate = playbackRate;
-      el.loop = videoLoop;
+      el.loop = repeatMode === "track";
       el.play()
         .then(() => ensureAudioGraph())
         .catch((e) => console.warn("Gagal memutar:", e));
@@ -320,7 +341,7 @@ function AppInner() {
     if (el) {
       el.src = item.url;
       el.playbackRate = playbackRate;
-      el.loop = videoLoop;
+      el.loop = repeatMode === "track";
       el.play()
         .then(() => ensureAudioGraph())
         .catch((e) => console.warn("Gagal memutar:", e));
@@ -381,16 +402,33 @@ function AppInner() {
       playerRef.current.pause();
     }
   }
+  function hasNextTrack() {
+    if (queue.length === 0) return false;
+    if (shuffle && queue.length > 1) return true;
+    return queueIndex + 1 < queue.length || repeatMode === "queue";
+  }
   function backSkip() {
+    // Mentok di awal video: tidak pindah ke video sebelumnya.
     if (!playerRef.current) return;
     playerRef.current.currentTime = Math.max(0, playerRef.current.currentTime - skipSeconds);
   }
   function fwdSkip() {
-    if (!playerRef.current) return;
-    const d = playerRef.current.duration;
-    playerRef.current.currentTime = isFinite(d)
-      ? Math.min(d, playerRef.current.currentTime + skipSeconds)
-      : playerRef.current.currentTime + skipSeconds;
+    const el = playerRef.current;
+    if (!el) return;
+    const d = el.duration;
+    const target = el.currentTime + skipSeconds;
+    if (isFinite(d) && target >= d - 0.05) {
+      // Melewati ujung video: lanjut ke video berikutnya sesuai pengaturan (acak / berurutan).
+      if (hasNextTrack()) next();
+      else el.currentTime = d;
+      return;
+    }
+    el.currentTime = target;
+  }
+  function showOsd(text) {
+    setOsd(text);
+    clearTimeout(osdTimerRef.current);
+    osdTimerRef.current = setTimeout(() => setOsd(null), 900);
   }
   function cycleRepeat() {
     setRepeatMode((m) => (m === "off" ? "queue" : m === "queue" ? "track" : "off"));
@@ -470,8 +508,13 @@ function AppInner() {
       const ctx = new AudioContextClass();
       const source = ctx.createMediaElementSource(playerRef.current);
       const gain = ctx.createGain();
-      source.connect(gain);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.78;
+      source.connect(analyser);
+      analyser.connect(gain);
       gain.connect(ctx.destination);
+      analyserRef.current = analyser;
       gain.gain.value = volumePercent > 100 ? volumePercent / 100 : 1;
       audioCtxRef.current = ctx;
       gainRef.current = gain;
@@ -506,21 +549,45 @@ function AppInner() {
     clearTimeout(ovTimerRef.current);
     setOvVisible(false);
   }
-  function handleFrameClick() {
-    if (isCoarsePointer()) {
+  function handleFrameClick(e) {
+    if (!isCoarsePointer()) {
+      togglePlay();
+      return;
+    }
+    // Layar sentuh: ketuk 1x = tampil/sembunyi kontrol, ketuk 2x di kiri/kanan = Back/Forward.
+    const rect = e.currentTarget.getBoundingClientRect();
+    const side = e.clientX - rect.left < rect.width / 2 ? "left" : "right";
+    const now = Date.now();
+    const tap = tapRef.current;
+    if (tap.timer && now - tap.time < 320 && tap.side === side) {
+      clearTimeout(tap.timer);
+      tap.timer = null;
+      tap.time = 0;
+      if (side === "left") {
+        backSkip();
+        showOsd(`Back ${skipSeconds}s`);
+      } else {
+        fwdSkip();
+        showOsd(`Forward ${skipSeconds}s`);
+      }
+      bumpOverlay();
+      return;
+    }
+    tap.time = now;
+    tap.side = side;
+    clearTimeout(tap.timer);
+    tap.timer = setTimeout(() => {
+      tap.timer = null;
       setOvVisible((v) => {
-        const nv = !v;
-        if (nv) {
+        if (!v) {
           clearTimeout(ovTimerRef.current);
           ovTimerRef.current = setTimeout(() => setOvVisible(false), 3500);
         } else {
           clearTimeout(ovTimerRef.current);
         }
-        return nv;
+        return !v;
       });
-    } else {
-      togglePlay();
-    }
+    }, 320);
   }
   useEffect(() => {
     function onDocPointer(e) {
@@ -552,9 +619,8 @@ function AppInner() {
     };
   }, [ctxMenu]);
   function toggleLoop() {
-    const next = !videoLoop;
-    setVideoLoop(next);
-    if (playerRef.current) playerRef.current.loop = next;
+    // Loop pada menu klik-kanan = mode Repeat "track" (selalu sinkron).
+    setRepeatMode((m) => (m === "track" ? "off" : "track"));
   }
   function setSpeed(rate) {
     setPlaybackRate(rate);
@@ -607,6 +673,90 @@ function AppInner() {
     }, 1000);
     return () => clearInterval(iv);
   }, [sleepEndAt]);
+
+  // ---- Loop native mengikuti mode Repeat "track" ----
+  useEffect(() => {
+    if (playerRef.current) playerRef.current.loop = repeatMode === "track";
+  }, [repeatMode]);
+
+  // ---- Pintasan keyboard (selalu aktif di /app): Space, panah atas/bawah, panah kiri/kanan ----
+  keyRef.current = { togglePlay, backSkip, fwdSkip, applyVolume, volumePercent, muted, nowPlaying, playing, skipSeconds };
+  useEffect(() => {
+    function isTyping(t) {
+      if (!t) return false;
+      if (t.isContentEditable || t.tagName === "TEXTAREA") return true;
+      if (t.tagName === "INPUT") return !["range", "checkbox", "radio", "button", "submit"].includes(t.type);
+      return false;
+    }
+    function onKeyDown(e) {
+      if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return;
+      const k = keyRef.current;
+      if (e.key === " " || e.code === "Space") {
+        e.preventDefault();
+        if (e.repeat) return;
+        k.togglePlay();
+        if (k.nowPlaying) showOsd(k.playing ? "Pause" : "Play");
+      } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        e.preventDefault();
+        const cur = k.muted ? 0 : k.volumePercent;
+        const nv = Math.min(120, Math.max(0, cur + (e.key === "ArrowUp" ? 5 : -5)));
+        k.applyVolume(nv);
+        showOsd(`Volume ${nv}%`);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        k.fwdSkip();
+        showOsd(`Forward ${k.skipSeconds}s`);
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        k.backSkip();
+        showOsd(`Back ${k.skipSeconds}s`);
+      }
+    }
+    function onKeyUp(e) {
+      // Cegah tombol yang sedang fokus ikut "diklik" oleh Space.
+      if ((e.key === " " || e.code === "Space") && !isTyping(e.target)) e.preventDefault();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ---- Visualizer Audio Only (bar naik-turun mengikuti getaran audio) ----
+  useEffect(() => {
+    if (viewMode !== "audio") return;
+    const bars = barsRef.current;
+    const setAll = (v) => bars.forEach((b) => b && (b.style.transform = `scaleY(${v})`));
+    if (!playing) {
+      setAll(0.04);
+      return;
+    }
+    let raf;
+    let t = 0;
+    const data = new Uint8Array(128);
+    function draw() {
+      raf = requestAnimationFrame(draw);
+      t += 0.07;
+      const an = analyserRef.current;
+      if (an) an.getByteFrequencyData(data);
+      for (let i = 0; i < bars.length; i++) {
+        if (!bars[i]) continue;
+        let v;
+        if (an) {
+          const idx = 1 + Math.floor(Math.pow(i / bars.length, 1.6) * 88);
+          v = Math.min(1, (data[idx] / 255) * 1.3);
+        } else {
+          v = 0.3 + 0.22 * Math.sin(t * 1.4 + i * 0.55) + 0.16 * Math.sin(t * 0.7 + i * 1.3);
+        }
+        bars[i].style.transform = `scaleY(${Math.max(0.04, v)})`;
+      }
+    }
+    draw();
+    return () => cancelAnimationFrame(raf);
+  }, [viewMode, playing]);
 
   // ---- Playlist ----
   async function handleCreatePlaylist() {
@@ -702,6 +852,57 @@ function AppInner() {
     if (exploreActiveCategory === name) setExploreActiveCategory("all");
     await setExploreCategories(next);
   }
+  async function handleReorderCategories(newOrder) {
+    setExploreCategoriesState(newOrder);
+    await setExploreCategories(newOrder);
+  }
+  async function handleConfirmRenameCategory() {
+    const { old: oldName, input } = renamingCategory;
+    const cleanNew = input.trim();
+    if (!cleanNew || cleanNew === oldName) {
+      setRenamingCategory(null);
+      return;
+    }
+    if (exploreCategories.includes(cleanNew)) {
+      setRenamingCategory(null);
+      return;
+    }
+    const next = exploreCategories.map((c) => (c === oldName ? cleanNew : c));
+    setExploreCategoriesState(next);
+    if (exploreActiveCategory === oldName) setExploreActiveCategory(cleanNew);
+    setRenamingCategory(null);
+    try {
+      await setExploreCategories(next);
+      const { affected } = await renameExploreCategory(oldName, cleanNew);
+      if (affected > 0) setExploreItems(await listExploreMedia());
+    } catch {
+      await getExploreCategories().then(setExploreCategoriesState);
+    }
+  }
+  function openThumbPicker(mediaId) {
+    thumbTargetId.current = mediaId;
+    thumbFileInputRef.current?.click();
+  }
+  async function handleThumbFileChange(e) {
+    const file = e.target.files?.[0];
+    const mediaId = thumbTargetId.current;
+    e.target.value = "";
+    if (!file || !mediaId) return;
+    if (!/^image\//.test(file.type)) {
+      setThumbErr("Thumbnail harus berupa gambar.");
+      return;
+    }
+    setThumbErr("");
+    setThumbUploadingId(mediaId);
+    try {
+      await uploadExploreThumbnail(mediaId, file);
+      setExploreItems(await listExploreMedia());
+    } catch (err) {
+      setThumbErr(err.message || "Gagal mengunggah thumbnail.");
+    } finally {
+      setThumbUploadingId(null);
+    }
+  }
 
   // ---- Panel: daftar media yang sedang DILIHAT (Library atau playlist) ----
   const viewPlaylist = playlists.find((p) => p.id === viewPlaylistId);
@@ -713,10 +914,10 @@ function AppInner() {
   return (
     <div className={"gramofon-player" + (playing ? " gp-is-playing" : "")}>
       <header className="gp-topbar">
-        <button className="gp-ibtn gp-menu-toggle" onClick={() => setMobileMenuOpen((v) => !v)} aria-label="Menu" data-tip-up="Menu">
+        <button className="gp-ibtn gp-menu-toggle" onClick={() => setMobileMenuOpen((v) => !v)} aria-label="Menu" data-tip-below="Menu">
           <IconMenu />
         </button>
-        <button type="button" className="gp-brand" onClick={goTheaterHome} data-tip-up="Buka Theater">
+        <button type="button" className="gp-brand" onClick={goTheaterHome} data-tip-below="Theater">
           <Logo size={26} />
           <span className="gp-brand-name">Gramofon</span>
         </button>
@@ -774,7 +975,7 @@ function AppInner() {
           <div className="gp-mini-head" onPointerDown={handleDragStart}>
             <IconGrip style={{ width: 14, height: 14, color: "var(--gp-dim)" }} />
             <span className="gp-mini-title">{nowPlaying ? nowPlaying.title : "Belum ada media"}</span>
-            <button className="gp-ibtn" style={{ width: 26, height: 26 }} onClick={() => setViewMode("theater")} data-tip-up="Perbesar">
+            <button className="gp-ibtn" style={{ width: 26, height: 26 }} onClick={() => setViewMode("theater")} data-tip="Perbesar">
               <IconExpand style={{ width: 13, height: 13 }} />
             </button>
           </div>
@@ -798,8 +999,8 @@ function AppInner() {
             duration,
             onSeek: (e) => { if (playerRef.current) playerRef.current.currentTime = Number(e.target.value); },
             onTogglePlay: togglePlay,
-            onPrev: prev,
-            onNext: next,
+            skipSeconds,
+            onInteract: bumpOverlay,
             onBack: backSkip,
             onFwd: fwdSkip,
             shuffle,
@@ -816,7 +1017,7 @@ function AppInner() {
         />
         {viewMode === "mini" && (
           <div className="gp-mini-controls">
-            <button className="gp-ibtn" onClick={togglePlay} disabled={!nowPlaying} data-tip-up="Putar/Jeda">
+            <button className="gp-ibtn" onClick={togglePlay} disabled={!nowPlaying} data-tip="Putar/Jeda">
               {playing ? <PauseIcon /> : <PlayIcon />}
             </button>
           </div>
@@ -827,7 +1028,7 @@ function AppInner() {
         <VideoContextMenu
           x={ctxMenu.x}
           y={ctxMenu.y}
-          loop={videoLoop}
+          loop={repeatMode === "track"}
           onToggleLoop={toggleLoop}
           rate={playbackRate}
           onSetSpeed={setSpeed}
@@ -882,9 +1083,7 @@ function AppInner() {
         {viewMode === "mini" && (
           <div className="gp-stage-layout">
             <div className="gp-stage">
-              <p className="gp-muted" style={{ marginBottom: 12 }}>
-                Video mengambang di layar — geser lewat bagian atasnya (ikon titik-titik).
-              </p>
+              <p className="gp-mini-hint">Video mengambang di layar — geser lewat bagian atasnya (ikon titik-titik).</p>
             </div>
             <PlaylistPanel
               playlists={playlists}
@@ -909,16 +1108,14 @@ function AppInner() {
           <div className="gp-stage-layout">
             <div className="gp-audio-stage" ref={audioStageRef} style={{ position: "relative" }} onClick={handleFrameClick}>
               <div className="gp-disc-wrap">
-                <div className="gp-disc">
+                <div className="gp-disc" style={{ animationPlayState: playing ? "running" : "paused" }}>
                   <div className="gp-disc-label" />
                   <div className="gp-disc-hole" />
                 </div>
               </div>
-              <div className="gp-notes-fx">
-                {[0, 1, 2, 3, 4].map((i) => (
-                  <span key={i} className="gp-note" style={{ "--i": i }}>
-                    <IconMusic style={{ width: "100%", height: "100%" }} />
-                  </span>
+              <div className="gp-eqbars">
+                {Array.from({ length: AUDIO_BARS }).map((_, i) => (
+                  <span key={i} ref={(el) => { barsRef.current[i] = el; }} />
                 ))}
               </div>
               <PlaybackOverlay
@@ -929,8 +1126,8 @@ function AppInner() {
                 duration={duration}
                 onSeek={(e) => { if (playerRef.current) playerRef.current.currentTime = Number(e.target.value); }}
                 onTogglePlay={togglePlay}
-                onPrev={prev}
-                onNext={next}
+                skipSeconds={skipSeconds}
+                onInteract={bumpOverlay}
                 onBack={backSkip}
                 onFwd={fwdSkip}
                 shuffle={shuffle}
@@ -1015,7 +1212,7 @@ function AppInner() {
             items={exploreItems}
             search={exploreSearch}
             setSearch={setExploreSearch}
-            onPlay={(m) => playItem(m, exploreItems, "Explore")}
+            onPlay={(m, list, label) => playItem(m, list, label)}
             onDelete={setDeleteExploreTarget}
             uploading={exploreUploading}
             progress={exploreProgress}
@@ -1038,13 +1235,22 @@ function AppInner() {
             setNewCategoryName={setNewCategoryName}
             onAddCategory={handleAddCategory}
             onRemoveCategory={handleRemoveCategory}
+            onReorderCategories={handleReorderCategories}
+            renamingCategory={renamingCategory}
+            setRenamingCategory={setRenamingCategory}
+            onConfirmRenameCategory={handleConfirmRenameCategory}
+            onThumbClick={openThumbPicker}
+            thumbUploadingId={thumbUploadingId}
+            thumbErr={thumbErr}
           />
         )}
       </main>
 
+      <input ref={thumbFileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleThumbFileChange} />
+
       <footer className="gp-bottombar">
         <div className="gp-np">
-          <div className={"gp-np-thumb" + (videoThumbUrl(nowPlaying) ? " has-img" : "")} style={videoThumbUrl(nowPlaying) ? { backgroundImage: `url(${videoThumbUrl(nowPlaying)})` } : undefined}>
+          <div className={"gp-np-thumb" + (mediaThumb(nowPlaying) ? " has-img" : "")} style={mediaThumb(nowPlaying) ? { backgroundImage: `url(${mediaThumb(nowPlaying)})` } : undefined}>
             <span className="gp-np-ic">{nowPlaying ? nowPlaying.resourceType === "video" ? <IconFilm /> : <IconMusic /> : <IconFilm />}</span>
           </div>
           <div className="gp-np-text">
@@ -1061,45 +1267,43 @@ function AppInner() {
           <div className="gp-controls">
             <button
               type="button"
-              className={"gp-ibtn" + (shuffle ? " on" : "")}
+              className={"gp-ibtn gp-hide-mobile" + (shuffle ? " on" : "")}
               onClick={() => setShuffle((v) => !v)}
-              data-tip-up="Acak Urutan"
+              data-tip={shuffle ? "Random: on" : "Random: off"}
             >
               <ShuffleIcon />
             </button>
-            <button type="button" className="gp-ibtn" onClick={prev} disabled={!queue.length} data-tip-up="Sebelumnya">
+            <button type="button" className="gp-ibtn" onClick={prev} disabled={!queue.length} data-tip="Previous Video">
               <PrevIcon />
             </button>
-            <button type="button" className="gp-ibtn" onClick={backSkip} disabled={!nowPlaying} data-tip-up={`Mundur ${skipSeconds} detik`}>
+            <button type="button" className="gp-ibtn" onClick={backSkip} disabled={!nowPlaying} data-tip="Back">
               <Back10Icon />
+              {nowPlaying && <span className="gp-numbadge">{skipSeconds}</span>}
             </button>
             <button
               type="button"
               className="gp-ibtn gp-btn-play"
               onClick={togglePlay}
               disabled={!nowPlaying}
-              data-tip-up={playing ? "Jeda" : "Putar"}
+              data-tip={playing ? "Pause" : "Play"}
             >
               {playing ? <PauseIcon /> : <PlayIcon />}
             </button>
-            <button type="button" className="gp-ibtn" onClick={fwdSkip} disabled={!nowPlaying} data-tip-up={`Maju ${skipSeconds} detik`}>
+            <button type="button" className="gp-ibtn" onClick={fwdSkip} disabled={!nowPlaying} data-tip="Forward">
               <Fwd10Icon />
+              {nowPlaying && <span className="gp-numbadge">{skipSeconds}</span>}
             </button>
-            <button type="button" className="gp-ibtn" onClick={next} disabled={!queue.length} data-tip-up="Berikutnya">
+            <button type="button" className="gp-ibtn" onClick={next} disabled={!queue.length} data-tip="Next Video">
               <NextIcon />
             </button>
             <button
               type="button"
-              className={"gp-ibtn" + (repeatMode !== "off" ? " on" : "")}
+              className={"gp-ibtn gp-hide-mobile" + (repeatMode !== "off" ? " on" : "")}
               onClick={cycleRepeat}
-              data-tip-up={repeatMode === "off" ? "Ulangi: Mati" : repeatMode === "queue" ? "Ulangi: Antrean" : "Ulangi: Satu Lagu"}
+              data-tip={repeatMode === "off" ? "Repeat: off" : repeatMode === "queue" ? "Repeat: queue" : "Repeat: Track"}
             >
               <RepeatIcon />
-              {repeatMode === "track" && (
-                <span style={{ position: "absolute", bottom: -2, right: -2, fontSize: 8, fontWeight: 700, background: "var(--gp-accent)", color: "var(--gp-accent-ink)", borderRadius: "50%", width: 12, height: 12, display: "grid", placeItems: "center" }}>
-                  1
-                </span>
-              )}
+              {repeatMode === "track" && <span className="gp-numbadge on">1</span>}
             </button>
           </div>
           <div className="gp-seek">
@@ -1125,7 +1329,7 @@ function AppInner() {
               type="button"
               className={"gp-ibtn gp-sleep-btn" + (sleepEndAt ? " on" : "")}
               onClick={() => setSleepOpen((v) => !v)}
-              data-tip-up="Timer Tidur"
+              data-tip="Timer Tidur"
             >
               <TimerIcon />
               {sleepEndAt && <span>{sleepLabel}</span>}
@@ -1164,30 +1368,28 @@ function AppInner() {
                     </button>
                   </div>
                 </div>
-                <button
-                  className="gp-btn sm primary"
-                  style={{ width: "100%", justifyContent: "center", marginTop: 10 }}
-                  onClick={() => {
-                    const n = Math.floor(+sleepCustomNum);
-                    if (n > 0) startSleep(sleepCustomUnit === "jam" ? n * 60 : n);
-                  }}
-                >
-                  Terapkan
-                </button>
-                {sleepEndAt && (
-                  <>
-                    <div className="gp-dd-sep" />
-                    <button className="gp-link" onClick={() => startSleep(0)}>
-                      Matikan timer
+                <div className={"gp-sleep-actions" + (sleepEndAt ? " two" : "")}>
+                  <button
+                    className="gp-btn sm primary"
+                    onClick={() => {
+                      const n = Math.floor(+sleepCustomNum);
+                      if (n > 0) startSleep(sleepCustomUnit === "jam" ? n * 60 : n);
+                    }}
+                  >
+                    Terapkan
+                  </button>
+                  {sleepEndAt && (
+                    <button className="gp-btn sm danger" onClick={() => startSleep(0)}>
+                      Matikan Timer
                     </button>
-                  </>
-                )}
+                  )}
+                </div>
               </div>
             )}
           </div>
 
           <div className="gp-vol-group">
-            <button type="button" className="gp-ibtn" onClick={toggleMute} data-tip-up="Bisukan">
+            <button type="button" className="gp-ibtn" onClick={toggleMute} data-tip="Bisukan">
               {muted || volumePercent === 0 ? <MuteIcon /> : <VolumeIcon />}
             </button>
             <input
@@ -1333,10 +1535,10 @@ function PlaybackOverlay({
   duration,
   onSeek,
   onTogglePlay,
-  onPrev,
-  onNext,
   onBack,
   onFwd,
+  skipSeconds,
+  onInteract,
   shuffle,
   onShuffle,
   repeatMode,
@@ -1348,55 +1550,89 @@ function PlaybackOverlay({
   onFullscreen,
   allowFullscreen,
 }) {
+  const [pop, setPop] = useState(null); // "vol" | "set" | null
+  useEffect(() => {
+    if (!visible) setPop(null);
+  }, [visible]);
+
+  // Bungkus aksi: jangan tembus ke frame (yang akan menyembunyikan kontrol) + perpanjang waktu tampil.
+  const act = (fn, closePop = true) => (e) => {
+    e.stopPropagation();
+    if (onInteract) onInteract();
+    if (closePop) setPop(null);
+    if (fn) fn(e);
+  };
+  const stop = (e) => {
+    e.stopPropagation();
+    if (onInteract) onInteract();
+  };
+  const repeatLabel = repeatMode === "off" ? "Repeat: off" : repeatMode === "queue" ? "Repeat: queue" : "Repeat: Track";
+
   return (
-    <div className={"gp-video-overlay" + (visible ? " show" : "")} onClick={(e) => e.stopPropagation()}>
-      <div className="gp-ov-top">
+    <div className={"gp-video-overlay" + (visible ? " show" : "")}>
+      <div className="gp-ov-top">{title && <div className="gp-ov-title gp-ellip">{title}</div>}</div>
+
+      <div className="gp-ov-mid">
+        <button onClick={act(onBack)} aria-label="Back">
+          <Back10Icon />
+          {skipSeconds ? <span className="gp-numbadge">{skipSeconds}</span> : null}
+        </button>
+        <button className="gp-ov-play" onClick={act(onTogglePlay)} aria-label="Play/Pause">
+          {playing ? <PauseIcon style={{ width: 24, height: 24 }} /> : <PlayIcon style={{ width: 24, height: 24 }} />}
+        </button>
+        <button onClick={act(onFwd)} aria-label="Forward">
+          <Fwd10Icon />
+          {skipSeconds ? <span className="gp-numbadge">{skipSeconds}</span> : null}
+        </button>
+      </div>
+
+      <div className="gp-ov-bottom" onClick={stop} onPointerDown={() => onInteract && onInteract()}>
+        <span className="gp-time">{formatTime(currentTime)}</span>
+        <input type="range" min="0" max={duration || 0} value={currentTime} onChange={onSeek} aria-label="Posisi pemutaran" />
+        <span className="gp-time">{formatTime(duration)}</span>
+
+        <div className="gp-ov-anchor">
+          <button className="gp-ov-btn" onClick={act(() => setPop((p) => (p === "vol" ? null : "vol")), false)} aria-label="Volume">
+            {muted || volumePercent === 0 ? <MuteIcon /> : <VolumeIcon />}
+          </button>
+          {pop === "vol" && (
+            <div className="gp-ov-pop" onClick={stop}>
+              <div className="gp-ov-vert">
+                <input type="range" min="0" max="120" value={muted ? 0 : volumePercent} onChange={onVolume} aria-label="Volume" />
+              </div>
+              <div className="gp-ov-vol-num">{muted ? 0 : volumePercent}%</div>
+              <button className="gp-ov-btn" style={{ margin: "4px auto 0" }} onClick={act(onToggleMute, false)} aria-label="Mute">
+                {muted ? <MuteIcon /> : <VolumeIcon />}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="gp-ov-anchor">
+          <button className={"gp-ov-btn" + (shuffle || repeatMode !== "off" ? " on" : "")} onClick={act(() => setPop((p) => (p === "set" ? null : "set")), false)} aria-label="Pengaturan">
+            <IconGear style={{ width: 17, height: 17 }} />
+          </button>
+          {pop === "set" && (
+            <div className="gp-ov-pop" onClick={stop}>
+              <div className="gp-ov-menu">
+                <button className={shuffle ? "on" : ""} onClick={act(onShuffle, false)}>
+                  <ShuffleIcon />
+                  {shuffle ? "Random: on" : "Random: off"}
+                </button>
+                <button className={repeatMode !== "off" ? "on" : ""} onClick={act(onRepeat, false)}>
+                  <RepeatIcon />
+                  {repeatLabel}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {allowFullscreen && (
-          <button onClick={onFullscreen} aria-label="Layar penuh">
+          <button className="gp-ov-btn" onClick={act(onFullscreen)} aria-label="Full screen">
             <IconExpand style={{ width: 16, height: 16 }} />
           </button>
         )}
-      </div>
-      <div className="gp-ov-mid">
-        <button onClick={onPrev} aria-label="Sebelumnya">
-          <PrevIcon />
-        </button>
-        <button onClick={onBack} aria-label="Mundur">
-          <Back10Icon />
-        </button>
-        <button className="gp-ov-play" onClick={onTogglePlay} aria-label="Putar/Jeda">
-          {playing ? <PauseIcon style={{ width: 22, height: 22 }} /> : <PlayIcon style={{ width: 22, height: 22 }} />}
-        </button>
-        <button onClick={onFwd} aria-label="Maju">
-          <Fwd10Icon />
-        </button>
-        <button onClick={onNext} aria-label="Berikutnya">
-          <NextIcon />
-        </button>
-      </div>
-      <div className="gp-ov-bottom">
-        {title && <div className="gp-ov-title gp-ellip">{title}</div>}
-        <div className="gp-ov-seek">
-          <span className="gp-time">{formatTime(currentTime)}</span>
-          <input type="range" min="0" max={duration || 0} value={currentTime} onChange={onSeek} aria-label="Posisi pemutaran" />
-          <span className="gp-time">{formatTime(duration)}</span>
-        </div>
-        <div className="gp-ov-row2">
-          <div className="gp-ov-side">
-            <button className={shuffle ? "on" : ""} onClick={onShuffle} aria-label="Acak">
-              <ShuffleIcon />
-            </button>
-            <button className={repeatMode !== "off" ? "on" : ""} onClick={onRepeat} aria-label="Ulangi">
-              <RepeatIcon />
-            </button>
-          </div>
-          <div className="gp-ov-side">
-            <button onClick={onToggleMute} aria-label="Bisukan">
-              {muted || volumePercent === 0 ? <MuteIcon /> : <VolumeIcon />}
-            </button>
-            <input type="range" className="gp-ov-vol" min="0" max="120" value={muted ? 0 : volumePercent} onChange={onVolume} aria-label="Volume" />
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -1477,7 +1713,7 @@ function PlaylistPanel({
             ))}
           </select>
         </div>
-        <button type="button" className="gp-panel-addbtn" onClick={() => setPanelNewOpen((v) => !v)} data-tip-up="Playlist Baru">
+        <button type="button" className="gp-panel-addbtn" onClick={() => setPanelNewOpen((v) => !v)} data-tip="Playlist Baru">
           <IconPlus style={{ width: 16, height: 16 }} />
         </button>
       </div>
@@ -1506,7 +1742,7 @@ function PlaylistPanel({
           <li className="gp-empty-list">Belum ada media di sini.</li>
         ) : (
           panelItems.map((m, idx) => {
-            const thumb = videoThumbUrl(m);
+            const thumb = mediaThumb(m);
             return (
               <li
                 key={m.id}
@@ -1531,7 +1767,7 @@ function PlaylistPanel({
                 }}
               >
                 {canReorder && (
-                  <span className="gp-drag-handle" data-tip-up="Geser untuk urutkan">
+                  <span className="gp-drag-handle" data-tip="Geser untuk urutkan">
                     <IconGrip style={{ width: 14, height: 14 }} />
                   </span>
                 )}
@@ -1606,6 +1842,7 @@ function ManageMediaView({
   const [selectMode, setSelectMode] = useState(false);
   const [dragIdx, setDragIdx] = useState(null);
   const [overIdx, setOverIdx] = useState(null);
+  const [page, setPage] = useState(1);
 
   const activePlaylist = playlistFilter === "all" ? null : playlists.find((p) => p.id === playlistFilter);
   const canDrag = !!activePlaylist && !search.trim() && typeFilter === "all";
@@ -1631,6 +1868,13 @@ function ManageMediaView({
       return bt - at;
     });
   }
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageRows = canDrag ? rows : rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, typeFilter, playlistFilter, sortBy]);
 
   function toggleRow(id) {
     setSel((prev) => {
@@ -1640,7 +1884,12 @@ function ManageMediaView({
     });
   }
   function toggleAll() {
-    setSel((prev) => (prev.size === rows.length ? new Set() : new Set(rows.map((m) => m.id))));
+    const allChecked = pageRows.length > 0 && pageRows.every((m) => sel.has(m.id));
+    setSel((prev) => {
+      const next = new Set(prev);
+      pageRows.forEach((m) => (allChecked ? next.delete(m.id) : next.add(m.id)));
+      return next;
+    });
   }
   function bulkDelete() {
     const ids = [...sel];
@@ -1685,7 +1934,7 @@ function ManageMediaView({
       {uploadErr && <p className="error-text">{uploadErr}</p>}
 
       <div className="gp-manage-grid">
-        <div className="gp-card">
+        <div className="gp-card gp-card--fill">
           <div className="gp-card-title">
             <h3>Penyimpanan</h3>
           </div>
@@ -1704,7 +1953,7 @@ function ManageMediaView({
           </ul>
         </div>
 
-        <div className="gp-card">
+        <div className="gp-card gp-card--fill">
           <div className="gp-card-title">
             <h3>Playlist</h3>
           </div>
@@ -1735,7 +1984,7 @@ function ManageMediaView({
                     e.stopPropagation();
                     onOpenRename(pl);
                   }}
-                  data-tip-up="Ubah nama"
+                  data-tip="Ubah nama"
                 >
                   <IconPencil style={{ width: 14, height: 14 }} />
                 </button>
@@ -1746,7 +1995,7 @@ function ManageMediaView({
                     e.stopPropagation();
                     onDeletePlaylistClick(pl);
                   }}
-                  data-tip-up="Hapus playlist"
+                  data-tip="Hapus playlist"
                 >
                   <IconTrash style={{ width: 14, height: 14 }} />
                 </button>
@@ -1803,11 +2052,6 @@ function ManageMediaView({
         >
           {selectMode ? "Batalkan Pilih" : "Pilih"}
         </button>
-        {selectMode && (
-          <button type="button" className="gp-btn sm" onClick={toggleAll}>
-            {sel.size === rows.length && rows.length > 0 ? "Batalkan Semua" : "Pilih Semua"}
-          </button>
-        )}
       </div>
 
       {selectMode && sel.size > 0 && (
@@ -1833,7 +2077,7 @@ function ManageMediaView({
                 {canDrag && <th className="gp-drag-col"></th>}
                 {selectMode && (
                   <th style={{ width: 32 }}>
-                    <input type="checkbox" checked={sel.size === rows.length} onChange={toggleAll} />
+                    <input type="checkbox" checked={pageRows.length > 0 && pageRows.every((m) => sel.has(m.id))} onChange={toggleAll} />
                   </th>
                 )}
                 <th>Judul</th>
@@ -1843,8 +2087,9 @@ function ManageMediaView({
               </tr>
             </thead>
             <tbody>
-              {rows.map((m, idx) => {
-                const thumb = videoThumbUrl(m);
+              {pageRows.map((m) => {
+                const thumb = mediaThumb(m);
+                const idx = rows.findIndex((r) => r.id === m.id);
                 return (
                 <tr
                   key={m.id}
@@ -1856,7 +2101,7 @@ function ManageMediaView({
                   onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
                 >
                   {canDrag && (
-                    <td className="gp-drag-col" data-tip-up="Geser untuk urutkan">
+                    <td className="gp-drag-col" data-tip="Geser untuk urutkan">
                       <IconGrip style={{ width: 14, height: 14, color: "var(--gp-dim)" }} />
                     </td>
                   )}
@@ -1879,20 +2124,20 @@ function ManageMediaView({
                   <td className="gp-muted">{formatBytes(m.bytes)}</td>
                   <td className="gp-acts">
                     <span className="gp-acts-inner">
-                      <button className="gp-ibtn" style={{ width: 28, height: 28 }} data-tip-up="Putar" onClick={() => onPlay(m, rows, activePlaylist ? activePlaylist.name : "Manage Media")}>
+                      <button className="gp-ibtn" style={{ width: 28, height: 28 }} data-tip="Putar" onClick={() => onPlay(m, rows, activePlaylist ? activePlaylist.name : "Manage Media")}>
                         <PlayIcon style={{ width: 13, height: 13 }} />
                       </button>
                       {!activePlaylist && (
-                        <button className="gp-ibtn" style={{ width: 28, height: 28 }} data-tip-up="Tambah ke playlist" onClick={() => onAddToPlaylistClick(m)}>
+                        <button className="gp-ibtn" style={{ width: 28, height: 28 }} data-tip="Tambah ke playlist" onClick={() => onAddToPlaylistClick(m)}>
                           <IconPlus style={{ width: 14, height: 14 }} />
                         </button>
                       )}
                       {activePlaylist ? (
-                        <button className="gp-ibtn" style={{ width: 28, height: 28 }} data-tip-up="Keluarkan dari playlist" onClick={() => onRemoveFromPlaylist(activePlaylist.id, m.id)}>
+                        <button className="gp-ibtn" style={{ width: 28, height: 28 }} data-tip="Keluarkan dari playlist" onClick={() => onRemoveFromPlaylist(activePlaylist.id, m.id)}>
                           <IconX style={{ width: 14, height: 14 }} />
                         </button>
                       ) : (
-                        <button className="gp-ibtn" style={{ width: 28, height: 28, color: "var(--gp-danger)" }} data-tip-up="Hapus" onClick={() => onDelete(m)}>
+                        <button className="gp-ibtn" style={{ width: 28, height: 28, color: "var(--gp-danger)" }} data-tip="Hapus" onClick={() => onDelete(m)}>
                           <IconTrash style={{ width: 14, height: 14 }} />
                         </button>
                       )}
@@ -1905,6 +2150,17 @@ function ManageMediaView({
           </table>
         )}
       </div>
+      {!canDrag && totalPages > 1 && (
+        <div className="pagination">
+          <button className="pagination__btn" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>‹</button>
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+            <button key={p} className={"pagination__btn" + (p === currentPage ? " is-active" : "")} onClick={() => setPage(p)}>
+              {p}
+            </button>
+          ))}
+          <button className="pagination__btn" disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)}>›</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1939,7 +2195,17 @@ function ExploreView({
   setNewCategoryName,
   onAddCategory,
   onRemoveCategory,
+  onReorderCategories,
+  renamingCategory,
+  setRenamingCategory,
+  onConfirmRenameCategory,
+  onThumbClick,
+  thumbUploadingId,
+  thumbErr,
 }) {
+  const [catDragIdx, setCatDragIdx] = useState(null);
+  const [catOverIdx, setCatOverIdx] = useState(null);
+
   if (!loadingExplore && !exploreOn && !isAdmin) {
     return (
       <div className="gp-scroll-page">
@@ -1947,16 +2213,35 @@ function ExploreView({
       </div>
     );
   }
+
+  // Kategori diperlakukan seperti playlist: memutar salah satu item ikut
+  // membawa daftar yang SEDANG TERLIHAT (sudah tersaring kategori/pencarian)
+  // sebagai antrean, supaya Next/Prev/Acak/Ulangi tetap berjalan wajar.
   const q = search.trim().toLowerCase();
   let filtered = q ? items.filter((m) => (m.title || "").toLowerCase().includes(q)) : items;
   if (activeCategory !== "all") filtered = filtered.filter((m) => (m.category || null) === activeCategory);
+  const queueLabel = activeCategory === "all" ? "Explore" : `Explore · ${activeCategory}`;
+
+  function handleCatDrop(idx) {
+    if (catDragIdx === null || catDragIdx === idx) {
+      setCatDragIdx(null);
+      setCatOverIdx(null);
+      return;
+    }
+    const next = [...categories];
+    const [moved] = next.splice(catDragIdx, 1);
+    next.splice(idx, 0, moved);
+    onReorderCategories(next);
+    setCatDragIdx(null);
+    setCatOverIdx(null);
+  }
 
   return (
     <div className="gp-scroll-page">
       <div className="gp-page-head">
         <div>
           <h2>Explore</h2>
-          <p>Media publik yang dikurasi admin untuk semua pengguna.</p>
+          <p>Media publik yang bisa diakses seluruh pengguna.</p>
         </div>
         <div className="gp-field grow" style={{ maxWidth: 260 }}>
           <IconSearch style={{ width: 15, height: 15 }} />
@@ -1965,10 +2250,10 @@ function ExploreView({
       </div>
 
       {isAdmin && (
-        <div className="gp-manage-grid" style={{ gridTemplateColumns: "1fr" }}>
+        <div className="gp-manage-grid">
           <div className="gp-card">
             <div className="gp-card-title">
-              <h3>Kelola Explore (admin)</h3>
+              <h3>Kelola Explore</h3>
             </div>
             {!exploreOn && <p className="gp-muted" style={{ marginBottom: 10 }}>Sedang dimatikan untuk pengguna biasa.</p>}
             <div className="gp-storage-num">
@@ -1978,32 +2263,13 @@ function ExploreView({
             <div className="gp-stack">
               <i className="gp-seg-v" style={{ width: `${usedPct}%` }} />
             </div>
-            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
-              <input type="number" min="1" value={limitInput} onChange={(e) => setLimitInput(e.target.value)} />
-              <span className="gp-muted">MB</span>
-              <button className="gp-btn sm" onClick={onSaveLimitClick}>Simpan batas</button>
-            </div>
+            <div className="gp-admin-limit">
+              <div className="gp-admin-limit__row">
+                <input type="number" min="1" value={limitInput} onChange={(e) => setLimitInput(e.target.value)} />
+                <span className="gp-muted">MB</span>
+              </div>
+              <button className="gp-btn sm" onClick={onSaveLimitClick}>Simpan Batas</button>
 
-            <div className="gp-card-title" style={{ marginBottom: 6 }}>
-              <h3 style={{ fontSize: 13 }}>Kategori</h3>
-            </div>
-            <div className="gp-cat-manage">
-              {categories.length === 0 && <span className="gp-muted" style={{ fontSize: 12.5 }}>Belum ada kategori.</span>}
-              {categories.map((c) => (
-                <span className="gp-cat-tag" key={c}>
-                  {c}
-                  <button onClick={() => onRemoveCategory(c)} data-tip-up="Hapus kategori">
-                    <IconX style={{ width: 11, height: 11 }} />
-                  </button>
-                </span>
-              ))}
-            </div>
-            <div className="gp-new-playlist" style={{ marginTop: 8, marginBottom: 14 }}>
-              <input placeholder="Nama kategori baru..." value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") onAddCategory(); }} />
-              <button className="gp-btn sm" onClick={onAddCategory}>Tambah</button>
-            </div>
-
-            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
               <select className="gp-select-plain" value={uploadCategory} onChange={(e) => setUploadCategory(e.target.value)}>
                 <option value="">Tanpa kategori</option>
                 {categories.map((c) => (
@@ -2016,7 +2282,61 @@ function ExploreView({
                 {uploading ? `Mengunggah... ${progress}%` : "Tambah ke Explore"}
               </button>
             </div>
-            {err && <p className="error-text">{err}</p>}
+            {err && <p className="error-text" style={{ marginTop: 10 }}>{err}</p>}
+          </div>
+
+          <div className="gp-card">
+            <div className="gp-card-title">
+              <h3>Kelola Kategori</h3>
+            </div>
+            <p className="gp-muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
+              Geser untuk mengurutkan. Kategori tampil ke pengguna sebagai filter di Explore.
+            </p>
+            {categories.length === 0 ? (
+              <p className="gp-muted" style={{ fontSize: 12.5 }}>Belum ada kategori.</p>
+            ) : (
+              <ul className="gp-catlist">
+                {categories.map((c, idx) => (
+                  <li
+                    key={c}
+                    className={"gp-catrow" + (catDragIdx === idx ? " is-dragging" : "") + (catOverIdx === idx ? " is-dragover" : "")}
+                    draggable
+                    onDragStart={() => setCatDragIdx(idx)}
+                    onDragOver={(e) => { e.preventDefault(); setCatOverIdx(idx); }}
+                    onDrop={() => handleCatDrop(idx)}
+                    onDragEnd={() => { setCatDragIdx(null); setCatOverIdx(null); }}
+                  >
+                    <span className="gp-drag-handle" data-tip="Geser untuk urutkan">
+                      <IconGrip style={{ width: 14, height: 14 }} />
+                    </span>
+                    {renamingCategory?.old === c ? (
+                      <input
+                        autoFocus
+                        value={renamingCategory.input}
+                        onChange={(e) => setRenamingCategory({ old: c, input: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") onConfirmRenameCategory();
+                          if (e.key === "Escape") setRenamingCategory(null);
+                        }}
+                        onBlur={onConfirmRenameCategory}
+                      />
+                    ) : (
+                      <span className="gp-catname">{c}</span>
+                    )}
+                    <button className="gp-ibtn" style={{ width: 26, height: 26 }} onClick={() => setRenamingCategory({ old: c, input: c })} data-tip="Ubah nama">
+                      <IconPencil style={{ width: 13, height: 13 }} />
+                    </button>
+                    <button className="gp-ibtn" style={{ width: 26, height: 26 }} onClick={() => onRemoveCategory(c)} data-tip="Hapus kategori">
+                      <IconTrash style={{ width: 13, height: 13 }} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="gp-new-playlist">
+              <input placeholder="Nama kategori baru..." value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") onAddCategory(); }} />
+              <button className="gp-btn sm primary" onClick={onAddCategory}>Tambah</button>
+            </div>
           </div>
         </div>
       )}
@@ -2033,6 +2353,7 @@ function ExploreView({
           ))}
         </div>
       )}
+      {thumbErr && <p className="error-text" style={{ marginTop: 10 }}>{thumbErr}</p>}
 
       {loadingExplore ? (
         <p className="gp-muted">Memuat...</p>
@@ -2041,10 +2362,10 @@ function ExploreView({
       ) : (
         <div className="gp-card-grid">
           {filtered.map((m) => {
-            const thumb = videoThumbUrl(m);
+            const thumb = mediaThumb(m);
             return (
             <div key={m.id} className={"gp-xcard" + (nowPlayingId === m.id ? " is-current" : "")}>
-              <div className="gp-xthumb" style={thumb ? { backgroundImage: `url(${thumb})` } : undefined} onClick={() => onPlay(m)}>
+              <div className="gp-xthumb" style={thumb ? { backgroundImage: `url(${thumb})` } : undefined} onClick={() => onPlay(m, filtered, queueLabel)}>
                 <span className="gp-type-badge">
                   {m.resourceType === "video" ? <IconFilm /> : <IconMusic />}
                 </span>
@@ -2052,17 +2373,18 @@ function ExploreView({
                   <PlayIcon style={{ width: 16, height: 16 }} />
                 </span>
                 {isAdmin && (
-                  <button
-                    className="gp-ibtn"
-                    style={{ position: "absolute", right: 6, top: 6, width: 26, height: 26, background: "rgba(4,3,8,.72)", color: "#fff" }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete(m);
-                    }}
-                    data-tip-up="Hapus dari Explore"
-                  >
-                    <IconTrash style={{ width: 13, height: 13 }} />
-                  </button>
+                  <span className="gp-xadmin">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onThumbClick(m.id); }}
+                      data-tip="Upload thumbnail"
+                      disabled={thumbUploadingId === m.id}
+                    >
+                      {thumbUploadingId === m.id ? <span style={{ fontSize: 9 }}>...</span> : <IconImage style={{ width: 13, height: 13 }} />}
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); onDelete(m); }} data-tip="Hapus dari Explore">
+                      <IconTrash style={{ width: 13, height: 13 }} />
+                    </button>
+                  </span>
                 )}
               </div>
               <div className="gp-xbody">
@@ -2287,6 +2609,23 @@ function IconLoop(props) {
   return (
     <svg className="gp-ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
       <path d="M17 2.1 21 6l-4 3.9" /><path d="M3 11.5V9a4 4 0 0 1 4-4h14" /><path d="M7 21.9 3 18l4-3.9" /><path d="M21 12.5V15a4 4 0 0 1-4 4H3" />
+    </svg>
+  );
+}
+
+function IconGear(props) {
+  return (
+    <svg className="gp-ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
+
+function IconImage(props) {
+  return (
+    <svg className="gp-ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect width="18" height="18" x="3" y="3" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21" />
     </svg>
   );
 }

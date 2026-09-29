@@ -46,7 +46,15 @@ export default function ProfileMenu() {
         <div className="profile-menu">
           <div className="profile-menu__header">
             <div className="profile-menu__name">{profile?.displayName || "Listener"}</div>
-            <div className="profile-menu__email">{user.email}</div>
+            {/* span polos (bukan <a>) + style inline anti-autolink, supaya
+                Safari/iOS tidak mengubah alamat email ini jadi tautan
+                bergaris bawah secara otomatis. */}
+            <span
+              className="profile-menu__email"
+              style={{ textDecoration: "none", cursor: "default", pointerEvents: "none" }}
+            >
+              {user.email}
+            </span>
           </div>
           <div className="profile-menu__divider" />
           <button
@@ -112,20 +120,16 @@ function HomeIcon() {
   );
 }
 function SettingsIcon() {
-  // Ikon gear standar (12 gigi) -- lebih jelas & simetris di ukuran kecil
-  // dibanding path kustom sebelumnya.
+  // Ikon gear sederhana (dibersihkan dari versi sebelumnya yang terlalu
+  // detail/rumit di ukuran kecil) -- lebih jelas dan tegas.
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="3.2" stroke="currentColor" strokeWidth="1.8" />
       <path
-        d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"
+        d="M12 3v2.4M12 18.6V21M21 12h-2.4M5.4 12H3M18.4 5.6l-1.7 1.7M7.3 16.7l-1.7 1.7M18.4 18.4l-1.7-1.7M7.3 7.3 5.6 5.6"
         stroke="currentColor"
-        strokeWidth="1.6"
-      />
-      <path
-        d="M19.4 13.5a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V19.5a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H4.5a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H10a1.65 1.65 0 0 0 1-1.51V4.5a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V10a1.65 1.65 0 0 0 1.51 1h.09a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinejoin="round"
+        strokeWidth="1.8"
+        strokeLinecap="round"
       />
     </svg>
   );
