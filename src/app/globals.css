@@ -294,11 +294,23 @@ select option {
   border-bottom: 1px solid var(--border-soft);
   background: var(--bg-surface);
 }
+/* Brand topbar: ukuran/spasi sama dengan .gp-brand di /app dan .lp-brand
+   di landing (17px, 15px di <=820px, letter-spacing .2px, logo 26px). */
 .dashboard-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
   font-weight: 700;
-  font-size: 15px;
+  font-size: 17px;
+  letter-spacing: 0.2px;
   text-decoration: none;
   color: inherit;
+  flex: none;
+}
+@media (max-width: 820px) {
+  .dashboard-brand {
+    font-size: 15px;
+  }
 }
 
 .dashboard-shell {

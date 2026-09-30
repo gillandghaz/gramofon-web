@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
+import Logo from "@/components/Logo";
 import RequireAuth from "@/components/RequireAuth";
 import NotificationBell from "@/components/NotificationBell";
 import ProfileMenu from "@/components/ProfileMenu";
@@ -39,12 +40,13 @@ function DashboardInner() {
   return (
     <div className="dashboard-page">
       <header className="dashboard-topbar">
-        {/* Sekarang benar-benar menautkan ke halaman player utama
-            (/app) -- tampilannya sengaja dijaga IDENTIK (tidak ada
-            garis bawah/warna hover baru) lewat class dashboard-brand
-            yang sama seperti sebelum jadi tautan. */}
+        {/* Menautkan ke halaman player utama (/app). Logo + tulisan
+            disamakan dengan brand di topbar /app dan landing page
+            (komponen <Logo />, bukan emoji). Tanpa garis bawah/warna
+            hover baru; lihat class dashboard-brand di globals.css. */}
         <Link href="/app" className="dashboard-brand">
-          🎧 Gramofon
+          <Logo size={26} />
+          <span>Gramofon</span>
         </Link>
         <div className="dashboard-topbar__right">
           <NotificationBell />
