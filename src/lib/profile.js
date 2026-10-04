@@ -16,6 +16,19 @@ export async function isUsernameAvailable(username) {
   return !snap.exists();
 }
 
+// Gerbang pendaftaran di server (lihat /api/auth/gate). Melempar
+// Error("registration-closed") kalau pendaftaran ditutup -- akun Auth yang
+// baru terbentuk itu sudah dihapus server, klien cukup keluar (signOut).
+export async function gateRegistration(user) {
+  const idToken = await user.getIdToken();
+  const res = await fetch("/api/auth/gate", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${idToken}` },
+  });
+  if (res.status === 403) throw new Error("registration-closed");
+  if (!res.ok) throw new Error("gate-failed");
+}
+
 export async function createUserProfile(user, { username, displayName }) {
   const usernameKey = username.toLowerCase();
   const usernameRef = doc(db, "usernames", usernameKey);
@@ -41,10 +54,24 @@ export async function createUserProfile(user, { username, displayName }) {
 // (baru pertama kali login), buatkan otomatis dengan username sementara
 // dari bagian depan emailnya. User tetap bisa/harus melengkapi username
 // permanennya di halaman Account kalau mau (lihat catatan Fase 4).
-export async function ensureUserProfile(user) {
+// Beberapa pemanggil (halaman login + self-heal di auth-context) bisa memanggil
+// ini bersamaan untuk akun yang sama -- satu proses saja yang dijalankan,
+// hasil/errornya dibagikan (supaya gerbang server tidak dipanggil dua kali).
+const inflight = new Map();
+export function ensureUserProfile(user) {
+  if (!inflight.has(user.uid)) {
+    const p = ensureUserProfileOnce(user).finally(() => inflight.delete(user.uid));
+    inflight.set(user.uid, p);
+  }
+  return inflight.get(user.uid);
+}
+
+async function ensureUserProfileOnce(user) {
   const userRef = doc(db, "users", user.uid);
   const existing = await getDoc(userRef);
   if (existing.exists()) return;
+
+  await gateRegistration(user);
 
   const base = (user.email || "user").split("@")[0].replace(/[^a-zA-Z0-9_]/g, "");
   let candidate = base || `user${Date.now()}`;

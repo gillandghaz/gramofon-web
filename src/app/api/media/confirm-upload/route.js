@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { adminDb } from "@/lib/firebase-admin";
+import { requireUser, errorResponse } from "@/lib/server-auth";
 import { destroyAsset, getAssetInfo } from "@/lib/cloudinary-admin";
 
 const DEFAULT_LIMIT_MB = 200;
@@ -23,7 +24,7 @@ export async function POST(request) {
     const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
     if (!idToken) return NextResponse.json({ error: "Tidak ada token." }, { status: 401 });
 
-    const decoded = await adminAuth().verifyIdToken(idToken);
+    const decoded = await requireUser(request);
     const uid = decoded.uid;
 
     // Dari browser kita HANYA terima publicId, resourceType, dan title.
@@ -107,10 +108,6 @@ export async function POST(request) {
 
     return NextResponse.json({ ok: true, id: docRef.id });
   } catch (err) {
-    console.error("confirm-upload error:", err);
-    const message = err?.message?.includes("belum dikonfigurasi")
-      ? err.message
-      : "Terjadi kesalahan di server.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(err, "media confirm-upload");
   }
 }

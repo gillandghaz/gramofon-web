@@ -12,6 +12,22 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
     }
 
+    // Akun Auth yang punya profil di users/{uid}. Firebase Auth bisa membuat
+    // akun kosong lewat API publiknya; tanpa profil, akun itu tidak boleh
+    // memakai data apa pun.
+    function isMember() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    // Saklar admin "Izinkan pendaftaran akun baru" (settings/app). Dibaca
+    // di sini supaya pembuatan profil/username BARU benar-benar ditolak di
+    // backend saat pendaftaran ditutup -- bukan hanya disembunyikan di UI.
+    function registrationOpen() {
+      return !exists(/databases/$(database)/documents/settings/app) ||
+        get(/databases/$(database)/documents/settings/app).data.get('registrationOpen', true) != false;
+    }
+
     // Saklar admin "Izinkan pengguna hapus akun sendiri" (settings/app).
     function selfDeleteAllowed() {
       return !exists(/databases/$(database)/documents/settings/app) ||
@@ -37,6 +53,7 @@ service cloud.firestore {
       // storageLimitMB TIDAK boleh diisi sendiri saat membuat profil —
       // hanya admin yang boleh menentukan kuota (lihat rule update admin).
       allow create: if isSignedIn()
+        && registrationOpen()
         && request.auth.uid == userId
         && request.resource.data.role == "user"
         && !request.resource.data.keys().hasAny(['storageLimitMB', 'photoURL', 'photoPublicId']);
@@ -83,7 +100,7 @@ service cloud.firestore {
     // ---- usernames/{username} : menjamin keunikan username.
     match /usernames/{username} {
       allow read: if true;
-      allow create: if (isSignedIn() && request.resource.data.uid == request.auth.uid) || isAdmin();
+      allow create: if (isSignedIn() && registrationOpen() && request.resource.data.uid == request.auth.uid) || isAdmin();
       allow delete: if isAdmin() ||
         (isSignedIn() && resource.data.uid == request.auth.uid && selfDeleteAllowed());
       allow update: if false;
@@ -107,8 +124,8 @@ service cloud.firestore {
     // pengguna lain, bukan cuma disembunyikan di UI.
     match /notifications/{notifId} {
       allow read: if isAdmin()
-        || (isSignedIn() && resource.data.targetUids == null)
-        || (isSignedIn() && resource.data.targetUids is list
+        || (isMember() && resource.data.targetUids == null)
+        || (isMember() && resource.data.targetUids is list
             && resource.data.targetUids.hasAny([request.auth.uid]));
       allow create, update, delete: if isAdmin();
     }
@@ -117,7 +134,7 @@ service cloud.firestore {
     match /media/{mediaId} {
       // Hanya pemilik atau admin. Query user biasa HARUS memakai
       // where("uid","==",uid_saya) — sudah begitu di lib/media.js.
-      allow read: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow read: if isMember() && (resource.data.uid == request.auth.uid || isAdmin());
       // SEMUA penulisan (create/update/delete) hanya lewat server
       // (/api/media/confirm-upload dan /api/media/delete, memakai Admin SDK
       // yang tidak terikat rules). Klien TIDAK boleh menulis langsung:
@@ -147,12 +164,12 @@ service cloud.firestore {
     // client (lihat playlists.js) -- persis pola yang sama dengan
     // notifications/{notifId} di atas ("rules bukan filter").
     match /playlists/{playlistId} {
-      allow read, delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow read, delete: if isMember() && resource.data.uid == request.auth.uid;
       // uid tidak boleh dipindah ke akun lain saat update.
-      allow update: if isSignedIn() && resource.data.uid == request.auth.uid
+      allow update: if isMember() && resource.data.uid == request.auth.uid
         && request.resource.data.uid == resource.data.uid
         && validPlaylist(request.resource.data);
-      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid
+      allow create: if isMember() && request.resource.data.uid == request.auth.uid
         && validPlaylist(request.resource.data);
     }
 

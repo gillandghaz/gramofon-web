@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { adminDb } from "@/lib/firebase-admin";
+import { requireUser, errorResponse } from "@/lib/server-auth";
 import { signedUploadPayload, PERSONAL_FOLDER, MEDIA_ALLOWED_FORMATS } from "@/lib/cloudinary-admin";
 
 const DEFAULT_LIMIT_MB = 200;
@@ -30,7 +31,7 @@ export async function POST(request) {
     const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
     if (!idToken) return NextResponse.json({ error: "Tidak ada token." }, { status: 401 });
 
-    const decoded = await adminAuth().verifyIdToken(idToken);
+    const decoded = await requireUser(request);
     const uid = decoded.uid;
 
     const body = await request.json().catch(() => ({}));
@@ -62,10 +63,6 @@ export async function POST(request) {
       signedUploadPayload({ folder: PERSONAL_FOLDER(uid), allowedFormats: MEDIA_ALLOWED_FORMATS })
     );
   } catch (err) {
-    console.error("sign-upload error:", err);
-    const message = err?.message?.includes("belum dikonfigurasi")
-      ? err.message
-      : "Terjadi kesalahan di server.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(err, "media sign-upload");
   }
 }

@@ -4,11 +4,12 @@ import { db } from "./firebase";
 const SETTINGS_DOC = doc(db, "settings", "app");
 const DEFAULT_STORAGE_LIMIT_MB = 200;
 
-// Catatan jujur: pengecekan ini mencegah pembuatan PROFIL user baru di
-// Firestore lewat aplikasi. Ini TIDAK mencegah seseorang memanggil Firebase
-// Auth SDK secara langsung untuk membuat akun Auth murni (tanpa profil).
-// Penegakan 100% butuh Firebase Cloud Functions (Blocking Functions, perlu
-// paket Blaze) — bisa ditambahkan di fase lanjutan kalau dibutuhkan.
+// Pembacaan ini hanya untuk TAMPILAN (menyembunyikan form daftar). Penegakan
+// sesungguhnya ada di server: (1) /api/auth/gate menghapus akun baru dan
+// menolaknya saat pendaftaran ditutup, (2) firestore.rules menolak
+// pembuatan profil/username baru, dan (3) semua API server menolak akun
+// yang tidak punya profil. Jadi memanggil Firebase Auth langsung pun tidak
+// menghasilkan akun yang bisa dipakai.
 export async function isRegistrationOpen() {
   const snap = await getDoc(SETTINGS_DOC);
   if (!snap.exists()) return true; // default: terbuka kalau belum pernah di-set

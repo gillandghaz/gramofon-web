@@ -6,7 +6,7 @@
 // di sisi client — komponen lain tinggal memanggil useAuth().isAdmin.
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import { ensureUserProfile } from "./profile";
@@ -50,9 +50,11 @@ export function AuthProvider({ children }) {
       // onSnapshot lalu otomatis terpanggil ulang setelah profil terbuat.
       if (!data && !healed) {
         healed = true;
-        ensureUserProfile(user).catch((err) =>
-          console.error("Gagal self-heal profil:", err)
-        );
+        ensureUserProfile(user).catch((err) => {
+          // Pendaftaran ditutup: server sudah menghapus akun kosong ini.
+          if (err?.message === "registration-closed") signOut(auth).catch(() => {});
+          else console.error("Gagal self-heal profil:", err);
+        });
       }
 
       setProfile(data);

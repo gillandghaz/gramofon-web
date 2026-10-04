@@ -7,6 +7,7 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
   sendPasswordResetEmail,
+  signOut,
 } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
 import { ensureUserProfile } from "@/lib/profile";
@@ -70,7 +71,10 @@ export default function LoginPage() {
       await ensureUserProfile(result.user);
       router.push("/app");
     } catch (err) {
-      if (err.code !== "auth/popup-closed-by-user") {
+      if (err.message === "registration-closed") {
+        await signOut(auth).catch(() => {});
+        setError("Pendaftaran akun baru sedang dinonaktifkan oleh admin.");
+      } else if (err.code !== "auth/popup-closed-by-user") {
         setError(friendlyAuthError(err.code));
       }
     } finally {

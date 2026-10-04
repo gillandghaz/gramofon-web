@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createUserWithEmailAndPassword, signInWithPopup } from "firebase/auth";
+import { createUserWithEmailAndPassword, signInWithPopup, signOut } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
 import { validatePassword, validateUsername, validateEmail } from "@/lib/validators";
-import { createUserProfile, isUsernameAvailable, ensureUserProfile } from "@/lib/profile";
+import { createUserProfile, isUsernameAvailable, ensureUserProfile, gateRegistration } from "@/lib/profile";
 import { isRegistrationOpen } from "@/lib/settings";
 import PasswordInput from "@/components/PasswordInput";
 
@@ -85,6 +85,7 @@ export default function RegisterPage() {
       // signup gagal karena SDK Firestore belum sepenuhnya "mengenali"
       // token akun yang baru saja dibuat (race condition singkat).
       await cred.user.getIdToken(true);
+      await gateRegistration(cred.user); // server menolak (dan menghapus akun) kalau pendaftaran ditutup
       await createUserProfile(cred.user, {
         username,
         displayName: displayName.trim() || username,
@@ -92,7 +93,10 @@ export default function RegisterPage() {
       router.push("/app");
     } catch (err) {
       console.error("Register error:", err);
-      if (err.message === "username-taken") {
+      if (err.message === "registration-closed") {
+        await signOut(auth).catch(() => {});
+        setError("Pendaftaran akun baru sedang dinonaktifkan oleh admin.");
+      } else if (err.message === "username-taken") {
         setError("Username baru saja diambil orang lain. Coba yang lain.");
       } else {
         setError(friendlyAuthError(err.code));
@@ -110,7 +114,10 @@ export default function RegisterPage() {
       await ensureUserProfile(result.user);
       router.push("/app");
     } catch (err) {
-      if (err.code !== "auth/popup-closed-by-user") {
+      if (err.message === "registration-closed") {
+        await signOut(auth).catch(() => {});
+        setError("Pendaftaran akun baru sedang dinonaktifkan oleh admin.");
+      } else if (err.code !== "auth/popup-closed-by-user") {
         setError(friendlyAuthError(err.code));
       }
     } finally {
