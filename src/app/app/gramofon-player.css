@@ -506,7 +506,7 @@ html[data-reduce-motion="true"] .gramofon-player .gp-disc{animation:none !import
   /* Bar volume di dalam video (Theater): diperkecil agar tidak keluar dari video */
   .gramofon-player .gp-ov-vert{width:22px;height:58px}
   .gramofon-player .gp-ov-vert input[type=range]{width:54px}
-  .gramofon-player .gp-ov-pop{padding:6px 4px;max-height:calc(100% - 52px);overflow:hidden}
+  .gramofon-player .gp-ov-pop{padding:6px 4px}
   .gramofon-player .gp-ov-vol-num{font-size:9.5px;margin-top:2px}
   .gramofon-player .gp-ov-pop .gp-ov-btn{width:26px;height:26px;margin-top:2px !important}
   .gramofon-player .gp-ov-pop .gp-ov-btn svg{width:15px;height:15px}
