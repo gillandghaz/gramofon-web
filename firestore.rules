@@ -18,21 +18,39 @@ service cloud.firestore {
         get(/databases/$(database)/documents/settings/app).data.selfDeleteEnabled != false;
     }
 
+    // Bentuk dokumen playlist yang diizinkan: hanya field yang memang dipakai
+    // aplikasi, nama string <= 100 karakter, dan trackIds list <= 2000 item
+    // (mencegah dokumen dibengkakkan sampai mendekati batas 1MB Firestore).
+    function validPlaylist(d) {
+      return d.keys().hasOnly(['uid', 'name', 'trackIds', 'createdAt', 'order'])
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 100
+        && d.trackIds is list && d.trackIds.size() <= 2000;
+    }
+
     // ---- users/{userId} : profil (email, displayName, username, role,
     // photoURL, settings, storageLimitMB, readNotifications)
     match /users/{userId} {
-      allow read: if isSignedIn();
+      // Hanya pemilik profil atau admin. (Sebelumnya semua user yang login
+      // bisa membaca seluruh profil user lain, termasuk email.)
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
 
+      // storageLimitMB TIDAK boleh diisi sendiri saat membuat profil —
+      // hanya admin yang boleh menentukan kuota (lihat rule update admin).
       allow create: if isSignedIn()
         && request.auth.uid == userId
-        && request.resource.data.role == "user";
+        && request.resource.data.role == "user"
+        && !request.resource.data.keys().hasAny(['storageLimitMB', 'photoURL', 'photoPublicId']);
 
-      // User biasa boleh update profilnya sendiri (nama, foto, settings,
+      // User biasa boleh update profilnya sendiri (nama, settings,
       // readNotifications, dll), TAPI TIDAK PERNAH boleh menyentuh field
-      // "role" ATAU "username" miliknya sendiri.
+      // "role", "username", "storageLimitMB" (kuota) ATAU "photoURL" /
+      // "photoPublicId" miliknya sendiri. Foto profil disimpan di
+      // Cloudinary dan HANYA ditulis server (/api/profile/photo/confirm)
+      // setelah file-nya diverifikasi -- sehingga Firestore tidak pernah
+      // menampung gambar (base64) maupun URL sembarang dari klien.
       allow update: if isSignedIn()
         && request.auth.uid == userId
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'username']);
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'username', 'storageLimitMB', 'photoURL', 'photoPublicId']);
 
       // Admin boleh mengubah field "role" milik akun mana pun (termasuk
       // sesama admin — untuk mencabut status admin akun lain).
@@ -97,28 +115,30 @@ service cloud.firestore {
 
     // ---- media/{mediaId} : entri video/musik milik masing-masing user.
     match /media/{mediaId} {
-      allow read: if isSignedIn();
-      // User hanya boleh membuat entri milik dirinya sendiri (uid di
-      // dokumen harus cocok dengan uid yang sedang login). Batas ukuran
-      // (kuota) DITEGAKKAN di server saat meminta tanda tangan upload
-      // Cloudinary (lihat /api/media/sign-upload) — bukan di sini, karena
-      // rules Firestore tidak tahu apa-apa soal Cloudinary.
-      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
-      // User boleh hapus entri miliknya sendiri; admin boleh hapus entri
-      // siapa pun (dipakai fitur Admin -> Media).
-      allow delete: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
-      allow update: if isAdmin();
+      // Hanya pemilik atau admin. Query user biasa HARUS memakai
+      // where("uid","==",uid_saya) — sudah begitu di lib/media.js.
+      allow read: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      // SEMUA penulisan (create/update/delete) hanya lewat server
+      // (/api/media/confirm-upload dan /api/media/delete, memakai Admin SDK
+      // yang tidak terikat rules). Klien TIDAK boleh menulis langsung:
+      //  - create langsung = bisa memalsukan "bytes" (kuota) dan "publicId"
+      //    milik orang lain, lalu memicu penghapusan file orang itu lewat
+      //    /api/media/delete;
+      //  - delete langsung = menghapus catatan tanpa menghapus file di
+      //    Cloudinary (file tetap tersimpan, kuota terlihat kosong).
+      allow create, update, delete: if false;
     }
 
-    // ---- exploreMedia/{mediaId} : media publik yang dikurasi admin,
-    // bisa dilihat SEMUA pengguna yang login (terlepas dari saklar
-    // exploreEnabled -- saklar itu cuma mengatur tampil/tidaknya MENU
-    // Explore di UI untuk non-admin, bukan soal boleh/tidaknya membaca
-    // datanya; kalau menunya disembunyikan, otomatis tidak ada yang
-    // query ke sini juga). Hanya admin yang boleh kirim/hapus.
+    // ---- exploreMedia/{mediaId} : media publik yang dikurasi admin.
+    // Pengguna biasa TIDAK membaca koleksi ini langsung: daftar Explore
+    // disajikan oleh server (/api/explore/list), yang membuang media
+    // berstatus hidden sebelum dikirim -- supaya media yang disembunyikan
+    // admin tidak pernah sampai ke browser pengguna lain. Semua penulisan
+    // (upload, hapus, thumbnail, kategori, hidden/visible) juga lewat
+    // server dengan Admin SDK, jadi klien tidak boleh menulis sama sekali.
     match /exploreMedia/{mediaId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isAdmin();
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
     }
 
     // ---- playlists/{playlistId} : playlist pribadi tiap pengguna.
@@ -127,8 +147,13 @@ service cloud.firestore {
     // client (lihat playlists.js) -- persis pola yang sama dengan
     // notifications/{notifId} di atas ("rules bukan filter").
     match /playlists/{playlistId} {
-      allow read, update, delete: if isSignedIn() && resource.data.uid == request.auth.uid;
-      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow read, delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+      // uid tidak boleh dipindah ke akun lain saat update.
+      allow update: if isSignedIn() && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid
+        && validPlaylist(request.resource.data);
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid
+        && validPlaylist(request.resource.data);
     }
 
     match /{document=**} {

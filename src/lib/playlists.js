@@ -10,6 +10,7 @@ import {
   serverTimestamp,
   updateDoc,
   where,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -20,7 +21,13 @@ import { db } from "./firebase";
 export async function listMyPlaylists(uid) {
   const snap = await getDocs(query(collection(db, "playlists"), where("uid", "==", uid)));
   const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  // Urutan tampil: pakai field "order" (hasil drag) kalau sudah pernah
+  // diatur; playlist yang belum punya "order" jatuh ke akhir, diurutkan
+  // di antara sesamanya berdasarkan waktu dibuat.
   list.sort((a, b) => {
+    const ao = typeof a.order === "number" ? a.order : Infinity;
+    const bo = typeof b.order === "number" ? b.order : Infinity;
+    if (ao !== bo) return ao - bo;
     const at = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
     const bt = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
     return at - bt;
@@ -28,14 +35,22 @@ export async function listMyPlaylists(uid) {
   return list;
 }
 
-export async function createPlaylist(uid, name) {
+export async function createPlaylist(uid, name, trackIds = []) {
   const docRef = await addDoc(collection(db, "playlists"), {
     uid,
     name: name.trim(),
-    trackIds: [],
+    trackIds,
     createdAt: serverTimestamp(),
   });
   return docRef.id;
+}
+
+// Menimpa urutan TAMPIL playlist milik user (bukan urutan trackIds di
+// dalamnya) -- dipakai fitur drag di kartu "Playlist" Manage Media.
+export async function reorderPlaylists(orderedIds) {
+  const batch = writeBatch(db);
+  orderedIds.forEach((id, idx) => batch.update(doc(db, "playlists", id), { order: idx }));
+  await batch.commit();
 }
 
 export async function renamePlaylist(playlistId, name) {
@@ -48,6 +63,18 @@ export async function deletePlaylist(playlistId) {
 
 export async function addTrackToPlaylist(playlistId, mediaId) {
   await updateDoc(doc(db, "playlists", playlistId), { trackIds: arrayUnion(mediaId) });
+}
+
+// Versi massal -- SATU tulisan untuk banyak media (dipakai "Pilih semua" di
+// Manage Media), bukan satu tulisan per media.
+export async function addTracksToPlaylist(playlistId, mediaIds) {
+  if (!mediaIds.length) return;
+  await updateDoc(doc(db, "playlists", playlistId), { trackIds: arrayUnion(...mediaIds) });
+}
+
+export async function removeTracksFromPlaylist(playlistId, mediaIds) {
+  if (!mediaIds.length) return;
+  await updateDoc(doc(db, "playlists", playlistId), { trackIds: arrayRemove(...mediaIds) });
 }
 
 export async function removeTrackFromPlaylist(playlistId, mediaId) {

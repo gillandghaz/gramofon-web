@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { destroyImage, AVATAR_FOLDER } from "@/lib/cloudinary-admin";
 
 export async function POST(request) {
   try {
@@ -13,7 +14,7 @@ export async function POST(request) {
     // memastikan orang yang memanggil endpoint ini benar-benar sedang
     // login sebagai dirinya (token ditandatangani Firebase, tidak bisa
     // dipalsukan dari browser).
-    const decoded = await adminAuth().verifyIdToken(idToken);
+    const decoded = await adminAuth().verifyIdToken(idToken, true);
     const callerUid = decoded.uid;
 
     // Cek ulang status admin LANGSUNG DI SERVER dari Firestore — sengaja
@@ -48,6 +49,10 @@ export async function POST(request) {
     // Hapus profil Firestore + reservasi username, lalu hapus akun Auth-nya.
     if (targetData.username) {
       await adminDb().collection("usernames").doc(targetData.username).delete().catch(() => {});
+    }
+    // Foto profil ada di Cloudinary -- ikut dibersihkan (best-effort).
+    if (typeof targetData.photoPublicId === "string" && targetData.photoPublicId.startsWith(`${AVATAR_FOLDER(targetUid)}/`)) {
+      await destroyImage(targetData.photoPublicId).catch((e) => console.error("Gagal hapus foto profil:", e));
     }
     await adminDb().collection("users").doc(targetUid).delete();
     await adminAuth().deleteUser(targetUid);

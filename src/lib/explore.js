@@ -1,153 +1,92 @@
-import { collection, getDocs } from "firebase/firestore";
-import { auth, db } from "./firebase";
+import { auth } from "./firebase";
+import { uploadToCloudinary, postJson } from "./cloudinary-upload";
 
-export async function listExploreMedia() {
-  const snap = await getDocs(collection(db, "exploreMedia"));
-  const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  list.sort((a, b) => {
-    const at = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-    const bt = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
-    return bt - at;
-  });
-  return list;
+async function token() {
+  return auth.currentUser.getIdToken();
 }
 
-// Sama alurnya dengan uploadMediaFile di media.js, tapi lewat endpoint
-// /api/explore/* (admin-only, akun Cloudinary terpisah, tanpa cek kuota).
-// Parameter "category" opsional -- dikirim ke confirm-upload supaya
-// tersimpan di dokumen exploreMedia (dipakai fitur filter kategori).
+// Daftar Explore datang dari server (bukan baca Firestore langsung), karena
+// media yang disembunyikan admin (hidden) tidak boleh sampai ke browser
+// pengguna biasa sama sekali. Admin menerima semuanya, termasuk yang hidden.
+export async function listExploreMedia() {
+  const data = await postJson("/api/explore/list", await token(), {}, "Gagal memuat Explore.");
+  return (data.items || []).map((m) => ({
+    ...m,
+    // Kompatibel dengan kode pengurut yang memakai createdAt.toMillis().
+    createdAt: { toMillis: () => m.createdAtMs || 0 },
+  }));
+}
+
+// Alur 3 langkah (HANYA admin -- dicek ulang di server):
+//   1) minta tanda tangan, 2) upload langsung ke Cloudinary,
+//   3) konfirmasi ke server (ukuran asli diambil dari Cloudinary).
 export async function uploadExploreFile(file, title, onProgress, category) {
-  const idToken = await auth.currentUser.getIdToken();
+  const idToken = await token();
 
-  const signRes = await fetch("/api/explore/sign-upload", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-    body: JSON.stringify({ fileSizeBytes: file.size }),
-  });
-  const signBody = await signRes.json().catch(() => ({}));
-  if (!signRes.ok) throw new Error(signBody.error || "Gagal meminta izin upload.");
-  const { signature, timestamp, folder, apiKey, cloudName } = signBody;
+  const payload = await postJson(
+    "/api/explore/sign-upload",
+    idToken,
+    { fileSizeBytes: file.size },
+    "Gagal meminta izin upload."
+  );
 
-  const cloudinaryResult = await new Promise((resolve, reject) => {
-    const form = new FormData();
-    form.append("file", file);
-    form.append("api_key", apiKey);
-    form.append("timestamp", timestamp);
-    form.append("signature", signature);
-    form.append("folder", folder);
+  // Endpoint "video" menangani video DAN musik; file lain ditolak Cloudinary.
+  const result = await uploadToCloudinary({ payload, file, resourceType: "video", onProgress });
 
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`);
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
-    };
-    xhr.onload = () => {
-      try {
-        const data = JSON.parse(xhr.responseText);
-        if (xhr.status >= 200 && xhr.status < 300) resolve(data);
-        else reject(new Error(data?.error?.message || "Upload ke Cloudinary gagal."));
-      } catch {
-        reject(new Error("Respons Cloudinary tidak terbaca."));
-      }
-    };
-    xhr.onerror = () => reject(new Error("Koneksi terputus saat upload."));
-    xhr.send(form);
-  });
+  // Cloudinary melaporkan musik sebagai "video" -- bedakan lewat MIME asli.
+  const resourceType = file.type.startsWith("audio/") ? "audio" : "video";
 
-  const confirmRes = await fetch("/api/explore/confirm-upload", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-    body: JSON.stringify({
-      publicId: cloudinaryResult.public_id,
-      bytes: cloudinaryResult.bytes,
-      resourceType: cloudinaryResult.resource_type,
-      format: cloudinaryResult.format,
-      secureUrl: cloudinaryResult.secure_url,
-      durationSeconds: cloudinaryResult.duration || null,
-      title: title || file.name,
-      category: category || null,
-    }),
-  });
-  const confirmBody = await confirmRes.json().catch(() => ({}));
-  if (!confirmRes.ok) throw new Error(confirmBody.error || "Gagal menyimpan data media.");
-  return confirmBody;
+  return postJson(
+    "/api/explore/confirm-upload",
+    idToken,
+    { publicId: result.public_id, resourceType, title: title || file.name, category: category || null },
+    "Gagal menyimpan data media."
+  );
 }
 
 export async function deleteExploreMedia(mediaId) {
-  const idToken = await auth.currentUser.getIdToken();
-  const res = await fetch("/api/explore/delete", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-    body: JSON.stringify({ mediaId }),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || "delete-failed");
-  return body;
+  return postJson("/api/explore/delete", await token(), { mediaId }, "delete-failed");
 }
 
-// Upload/ganti thumbnail KHUSUS satu item Explore (admin) -- alur sama
-// (signed upload) tapi endpoint & folder terpisah dari upload video/musik,
-// dan ukurannya tidak dihitung ke kuota Explore.
+// Upload/ganti thumbnail satu item Explore (HANYA admin). Gambar disimpan di
+// Cloudinary; Firestore hanya menyimpan URL-nya.
 export async function uploadExploreThumbnail(mediaId, file) {
-  const idToken = await auth.currentUser.getIdToken();
+  const idToken = await token();
 
-  const signRes = await fetch("/api/explore/thumbnail/sign-upload", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-    body: JSON.stringify({ mediaId }),
-  });
-  const signBody = await signRes.json().catch(() => ({}));
-  if (!signRes.ok) throw new Error(signBody.error || "Gagal meminta izin upload thumbnail.");
-  const { signature, timestamp, folder, apiKey, cloudName } = signBody;
+  const payload = await postJson(
+    "/api/explore/thumbnail/sign-upload",
+    idToken,
+    { mediaId },
+    "Gagal meminta izin upload thumbnail."
+  );
+  const result = await uploadToCloudinary({ payload, file, resourceType: "image" });
 
-  const cloudinaryResult = await new Promise((resolve, reject) => {
-    const form = new FormData();
-    form.append("file", file);
-    form.append("api_key", apiKey);
-    form.append("timestamp", timestamp);
-    form.append("signature", signature);
-    form.append("folder", folder);
-
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`);
-    xhr.onload = () => {
-      try {
-        const data = JSON.parse(xhr.responseText);
-        if (xhr.status >= 200 && xhr.status < 300) resolve(data);
-        else reject(new Error(data?.error?.message || "Upload thumbnail ke Cloudinary gagal."));
-      } catch {
-        reject(new Error("Respons Cloudinary tidak terbaca."));
-      }
-    };
-    xhr.onerror = () => reject(new Error("Koneksi terputus saat upload thumbnail."));
-    xhr.send(form);
-  });
-
-  const confirmRes = await fetch("/api/explore/thumbnail/confirm", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-    body: JSON.stringify({
-      mediaId,
-      publicId: cloudinaryResult.public_id,
-      secureUrl: cloudinaryResult.secure_url,
-    }),
-  });
-  const confirmBody = await confirmRes.json().catch(() => ({}));
-  if (!confirmRes.ok) throw new Error(confirmBody.error || "Gagal menyimpan thumbnail.");
-  return confirmBody;
+  return postJson(
+    "/api/explore/thumbnail/confirm",
+    idToken,
+    { mediaId, publicId: result.public_id },
+    "Gagal menyimpan thumbnail."
+  );
 }
 
 // Ganti nama kategori -- ikut memindahkan semua item Explore yang memakai
-// nama lama ke nama baru (lewat server, karena butuh Admin SDK untuk
-// menulis ke banyak dokumen exploreMedia sekaligus).
+// nama lama ke nama baru.
 export async function renameExploreCategory(oldName, newName) {
-  const idToken = await auth.currentUser.getIdToken();
-  const res = await fetch("/api/explore/rename-category", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-    body: JSON.stringify({ oldName, newName }),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || "rename-failed");
-  return body;
+  return postJson("/api/explore/rename-category", await token(), { oldName, newName }, "rename-failed");
+}
+
+// Admin: sembunyikan / tampilkan satu media untuk SEMUA pengguna.
+export async function setExploreMediaHidden(mediaId, hidden) {
+  return postJson("/api/explore/set-visibility", await token(), { mediaId, hidden }, "Gagal mengubah visibilitas.");
+}
+
+// Admin: atur isi sebuah kategori. addIds dipindahkan KE kategori,
+// removeIds dikeluarkan dari kategori (jadi tanpa kategori).
+export async function setExploreCategoryMembers(category, addIds = [], removeIds = []) {
+  return postJson(
+    "/api/explore/set-category",
+    await token(),
+    { category, addIds, removeIds },
+    "Gagal menyimpan kategori."
+  );
 }

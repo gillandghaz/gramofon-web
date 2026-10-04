@@ -1,21 +1,14 @@
 import { NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { adminDb } from "@/lib/firebase-admin";
+import { requireAdmin, readJson, errorResponse, HttpError } from "@/lib/server-auth";
 
 export async function POST(request) {
   try {
-    const authHeader = request.headers.get("authorization") || "";
-    const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-    if (!idToken) return NextResponse.json({ error: "Tidak ada token." }, { status: 401 });
+    await requireAdmin(request);
 
-    const decoded = await adminAuth().verifyIdToken(idToken);
-    const callerSnap = await adminDb().collection("users").doc(decoded.uid).get();
-    if (!callerSnap.exists || callerSnap.data().role !== "admin") {
-      return NextResponse.json({ error: "Bukan admin." }, { status: 403 });
-    }
-
-    const { oldName, newName } = await request.json();
-    if (!oldName || !newName || !newName.trim()) {
-      return NextResponse.json({ error: "Nama kategori tidak valid." }, { status: 400 });
+    const { oldName, newName } = await readJson(request);
+    if (typeof oldName !== "string" || typeof newName !== "string" || !oldName || !newName.trim()) {
+      throw new HttpError(400, "Nama kategori tidak valid.");
     }
     const cleanNew = newName.trim().slice(0, 60);
 
@@ -23,13 +16,15 @@ export async function POST(request) {
     // lama ini ke nama baru -- supaya pengelompokannya tidak "yatim"
     // setelah kategori diganti namanya.
     const snap = await adminDb().collection("exploreMedia").where("category", "==", oldName).get();
-    const batch = adminDb().batch();
-    snap.forEach((d) => batch.update(d.ref, { category: cleanNew }));
-    if (snap.size > 0) await batch.commit();
+    const docs = snap.docs;
+    for (let i = 0; i < docs.length; i += 400) {
+      const batch = adminDb().batch();
+      docs.slice(i, i + 400).forEach((d) => batch.update(d.ref, { category: cleanNew }));
+      await batch.commit();
+    }
 
-    return NextResponse.json({ ok: true, affected: snap.size });
+    return NextResponse.json({ ok: true, affected: docs.length });
   } catch (err) {
-    console.error("rename-category error:", err);
-    return NextResponse.json({ error: "Terjadi kesalahan di server." }, { status: 500 });
+    return errorResponse(err, "explore rename-category");
   }
 }

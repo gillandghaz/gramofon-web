@@ -119,11 +119,11 @@ Admin yang akan gagal dengan pesan error.
 4. Redeploy di Vercel setelah menambahkan env var (Vercel tidak otomatis
    membaca env var baru untuk deployment yang sudah berjalan).
 
-**Catatan soal foto profil:** foto profil disimpan langsung sebagai
-base64 di dokumen Firestore user (bukan Firebase Storage) — jadi tidak
-butuh setup tambahan apa pun, dan tetap di paket gratis (Spark). Ini
-sengaja dipilih karena sejak Februari 2026 Firebase Storage mewajibkan
-paket berbayar (Blaze) untuk semua project, termasuk yang baru.
+**Catatan soal foto profil:** foto profil kini disimpan di **Cloudinary**
+(folder `gramofon-avatars/{uid}`), bukan base64 di Firestore. Firestore hanya
+menyimpan teks (`photoURL`, `photoPublicId`) yang ditulis server lewat
+`/api/profile/photo/confirm`. Foto lama berformat base64 tetap tampil sampai
+penggunanya mengganti foto.
 
 ## 10. Setup Cloudinary (untuk upload video/musik pengguna)
 
@@ -178,3 +178,11 @@ Ini BUKAN "25GB penyimpanan yang selalu tersedia" — kalau video sering
 diputar orang, itu juga memakai kredit yang sama. Untuk skala aplikasi
 publik-terbatas ini kemungkinan besar cukup, tapi pantau pemakaian di
 Cloudinary Dashboard secara berkala.
+
+
+## 12. Explore: hidden/visible & kategori
+
+- Daftar Explore disajikan server (`POST /api/explore/list`); media berstatus
+  `hidden` hanya dikirim ke admin. `firestore.rules` membatasi baca langsung
+  koleksi `exploreMedia` ke admin. **Publish ulang `firestore.rules`.**
+- Upload video/musik & thumbnail Explore hanya untuk admin (dicek di server).

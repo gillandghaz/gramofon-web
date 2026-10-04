@@ -1,39 +1,41 @@
-import { doc, updateDoc } from "firebase/firestore";
-import { db } from "./firebase";
+import { auth } from "./firebase";
+import { uploadToCloudinary, postJson } from "./cloudinary-upload";
 
-// Ukuran & kualitas sengaja dijaga kecil supaya hasil base64-nya jauh di
-// bawah batas 1 MiB per dokumen Firestore (foto sekitar 20-60 KB setelah
-// ini, aman ditumpangkan bersama field lain di dokumen users/{uid}).
-const MAX_DIMENSION = 220;
-const JPEG_QUALITY = 0.82;
+// Foto profil kini disimpan di Cloudinary (BUKAN lagi base64 di Firestore).
+// Firestore hanya menyimpan URL + public_id (teks), dan penulisannya
+// dilakukan server setelah memverifikasi file-nya (lihat
+// /api/profile/photo/confirm) -- klien tidak boleh menulis photoURL sendiri.
+//
+// Gambar tetap diperkecil dulu di browser (persegi 256px, JPEG) supaya
+// upload cepat dan hemat kuota Cloudinary.
+const OUTPUT_DIMENSION = 256;
+const JPEG_QUALITY = 0.85;
 
-// Disimpan langsung sebagai data URL base64 di Firestore — TIDAK memakai
-// Firebase Storage sama sekali. Alasan: sejak Feb 2026, Firebase Storage
-// mewajibkan project berada di paket Blaze (perlu kartu kredit terdaftar,
-// meski pemakaian kecil tetap $0). Menyimpan di Firestore menghindari
-// kebutuhan itu sepenuhnya — sama seperti pendekatan aplikasi lokal lama
-// (canvas resize -> base64 -> disimpan di database).
-function resizeImageToDataUrl(file, maxDim = MAX_DIMENSION) {
+function resizeImageToBlob(file, dim = OUTPUT_DIMENSION) {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("read-failed"));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error("decode-failed"));
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = maxDim;
-        canvas.height = maxDim;
-        const ctx = canvas.getContext("2d");
-        const scale = Math.max(maxDim / img.width, maxDim / img.height);
-        const dw = img.width * scale;
-        const dh = img.height * scale;
-        ctx.drawImage(img, (maxDim - dw) / 2, (maxDim - dh) / 2, dw, dh);
-        resolve(canvas.toDataURL("image/jpeg", JPEG_QUALITY));
-      };
-      img.src = reader.result;
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("decode-failed"));
     };
-    reader.readAsDataURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement("canvas");
+      canvas.width = dim;
+      canvas.height = dim;
+      const ctx = canvas.getContext("2d");
+      const scale = Math.max(dim / img.width, dim / img.height);
+      const dw = img.width * scale;
+      const dh = img.height * scale;
+      ctx.drawImage(img, (dim - dw) / 2, (dim - dh) / 2, dw, dh);
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error("encode-failed"))),
+        "image/jpeg",
+        JPEG_QUALITY
+      );
+    };
+    img.src = url;
   });
 }
 
@@ -45,14 +47,23 @@ export async function uploadProfilePhoto(uid, file) {
     throw new Error("too-large"); // batas file mentah sebelum di-resize
   }
 
-  const dataUrl = await resizeImageToDataUrl(file);
-
-  // Sanity check terakhir: pastikan hasil akhir masih jauh di bawah batas
-  // dokumen Firestore (1 MiB) sebelum benar-benar ditulis.
-  if (dataUrl.length > 700 * 1024) {
+  const blob = await resizeImageToBlob(file);
+  if (blob.size > 700 * 1024) {
     throw new Error("still-too-large");
   }
 
-  await updateDoc(doc(db, "users", uid), { photoURL: dataUrl });
-  return dataUrl;
+  const idToken = await auth.currentUser.getIdToken();
+  const payload = await postJson("/api/profile/photo/sign-upload", idToken, {}, "Gagal meminta izin upload foto.");
+  const result = await uploadToCloudinary({
+    payload,
+    file: new File([blob], "avatar.jpg", { type: "image/jpeg" }),
+    resourceType: "image",
+  });
+  const confirmed = await postJson(
+    "/api/profile/photo/confirm",
+    idToken,
+    { publicId: result.public_id },
+    "Gagal menyimpan foto profil."
+  );
+  return confirmed.photoURL;
 }

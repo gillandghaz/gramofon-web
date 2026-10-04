@@ -32,9 +32,21 @@ export async function POST(request) {
       return NextResponse.json({ error: "Tidak punya izin menghapus media ini." }, { status: 403 });
     }
 
-    await destroyAsset(media.publicId, media.resourceType).catch((e) =>
-      console.error("Gagal hapus asset Cloudinary:", e)
-    );
+    // Pertahanan berlapis: hanya hapus file di Cloudinary kalau publicId
+    // memang berada di folder milik pemilik media ini. Mencegah dokumen
+    // yang publicId-nya dipalsukan dipakai untuk menghapus file orang lain
+    // (atau file Explore). Dokumen Firestore-nya tetap dihapus.
+    const expectedPrefix = `gramofon/${media.uid}/`;
+    if (typeof media.publicId === "string" && media.publicId.startsWith(expectedPrefix)) {
+      await destroyAsset(media.publicId, media.resourceType).catch((e) =>
+        console.error("Gagal hapus asset Cloudinary:", e)
+      );
+    } else {
+      console.warn(
+        "delete-media: publicId tidak sesuai folder pemilik, file Cloudinary TIDAK dihapus. mediaId:",
+        mediaId
+      );
+    }
 
     await adminDb().collection("media").doc(mediaId).delete();
 

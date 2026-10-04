@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import RequireAuth from "@/components/RequireAuth";
@@ -15,6 +15,8 @@ import {
   deleteExploreMedia,
   uploadExploreThumbnail,
   renameExploreCategory,
+  setExploreMediaHidden,
+  setExploreCategoryMembers,
 } from "@/lib/explore";
 import {
   getDefaultStorageLimitMB,
@@ -30,8 +32,11 @@ import {
   renamePlaylist,
   deletePlaylist,
   addTrackToPlaylist,
+  addTracksToPlaylist,
   removeTrackFromPlaylist,
+  removeTracksFromPlaylist,
   reorderPlaylistTracks,
+  reorderPlaylists,
 } from "@/lib/playlists";
 import "./gramofon-player.css";
 
@@ -56,19 +61,42 @@ function formatTime(s) {
 
 // Thumbnail: gambar buatan admin (thumbUrl) kalau ada, kalau tidak
 // ambil frame pertama video Cloudinary langsung dari URL yang sudah ada.
+const CLOUDINARY_URL_RE = /^https:\/\/res\.cloudinary\.com\/[^\s"'()\\]+$/;
 function mediaThumb(m) {
   if (!m) return null;
   try {
-    if (m.thumbUrl) return m.thumbUrl.replace("/upload/", "/upload/c_fill,w_480,h_270,q_auto,f_auto/");
-    if (m.resourceType !== "video" || !m.url) return null;
+    // Semua gambar/frame berasal dari Cloudinary; URL lain diabaikan
+    // (juga mencegah karakter aneh masuk ke CSS url(...)).
+    if (m.thumbUrl && CLOUDINARY_URL_RE.test(m.thumbUrl)) {
+      return m.thumbUrl.replace("/upload/", "/upload/c_fill,w_480,h_270,q_auto,f_auto/");
+    }
+    if (m.resourceType !== "video" || !m.url || !CLOUDINARY_URL_RE.test(m.url)) return null;
     return m.url.replace("/upload/", "/upload/so_0/").replace(/\.[a-zA-Z0-9]+(\?.*)?$/, ".jpg");
   } catch {
     return null;
   }
 }
 
+function repeatText(mode) {
+  return mode === "track" ? "Repeat: Track" : mode === "queue" ? "Repeat: Queue" : "Repeat: Off";
+}
+
 const AUDIO_BARS = 40;
 const PAGE_SIZE = 10;
+const EXPLORE_PAGE_SIZE = 60;
+
+// Playlist bisa berisi media pribadi (id biasa) ATAU media Explore
+// (disimpan dengan awalan "explore:") -- resolver ini yang menentukan
+// mau diambil dari daftar yang mana.
+function resolveTrack(id, items, exploreItems) {
+  if (typeof id === "string" && id.startsWith("explore:")) {
+    return exploreItems.find((m) => m.id === id.slice(8));
+  }
+  return items.find((m) => m.id === id);
+}
+function trackRefFor(media) {
+  return media.source === "explore" ? `explore:${media.id}` : media.id;
+}
 
 function isCoarsePointer() {
   return typeof window !== "undefined" && window.matchMedia && window.matchMedia("(pointer:coarse)").matches;
@@ -136,8 +164,15 @@ function AppInner() {
   const gainRef = useRef(null);
   const audioCtxRef = useRef(null);
 
-  const miniWrapRef = useRef(null);
+  // Wrapper <video> SATU-SATUNYA: selalu terpasang (dipakai Theater & Mini).
+  const videoWrapRef = useRef(null);
   const dragState = useRef(null);
+  // Posisi hasil geser mini player ({left, top} px) -- disimpan di state
+  // supaya tetap benar setelah pindah menu (tidak lagi bergantung pada
+  // style yang ditempel manual ke elemen, yang dulu "bocor" dan membuat
+  // mini player nyangkut di bawah topbar setelah balik ke menu Mini).
+  const [miniPos, setMiniPos] = useState(null);
+  const miniPosRef = useRef(null);
   const theaterAnchorRef = useRef(null);
   const [videoRect, setVideoRect] = useState(null);
 
@@ -159,6 +194,17 @@ function AppInner() {
   const [addToPlaylistFor, setAddToPlaylistFor] = useState(null);
   const [panelNewOpen, setPanelNewOpen] = useState(false);
   const [panelNewName, setPanelNewName] = useState("");
+  const [createPlaylistModal, setCreatePlaylistModal] = useState(null); // { fromPanel }
+  const [createPlaylistName, setCreatePlaylistName] = useState("");
+  const [createPlaylistSel, setCreatePlaylistSel] = useState(new Set());
+  const [createPlaylistSearch, setCreatePlaylistSearch] = useState("");
+  const [createPlaylistBusy, setCreatePlaylistBusy] = useState(false);
+  const [bulkAddPlaylistIds, setBulkAddPlaylistIds] = useState(null);
+  const [deleteCategoryTarget, setDeleteCategoryTarget] = useState(null);
+  const [assignCategoryFor, setAssignCategoryFor] = useState(null); // media Explore yang mau dikategorikan
+  const [categoryMembersFor, setCategoryMembersFor] = useState(null); // nama kategori yang isinya diedit
+  const [categoryModalBusy, setCategoryModalBusy] = useState(false);
+  const [categoryModalErr, setCategoryModalErr] = useState("");
 
   // ---- Manage Media: toolbar ----
   const [manageSearch, setManageSearch] = useState("");
@@ -305,6 +351,8 @@ function AppInner() {
     } catch {
       setUploadErr("Gagal menghapus sebagian media.");
       setBulkDeleteIds(null);
+      setManageSel(new Set());
+      await refresh().catch(() => {});
     } finally {
       setBulkDeleteBusy(false);
     }
@@ -430,8 +478,9 @@ function AppInner() {
     clearTimeout(osdTimerRef.current);
     osdTimerRef.current = setTimeout(() => setOsd(null), 900);
   }
+  // Urutan siklus Repeat: Off -> Track -> Queue -> Off.
   function cycleRepeat() {
-    setRepeatMode((m) => (m === "off" ? "queue" : m === "queue" ? "track" : "off"));
+    setRepeatMode((m) => (m === "off" ? "track" : m === "track" ? "queue" : "off"));
   }
 
   function selectView(key) {
@@ -444,31 +493,80 @@ function AppInner() {
   }
 
   // ---- Mini player: bisa digeser ----
+  // Batas gerak: seluruh layar, tapi TIDAK boleh masuk ke area topbar
+  // (kalau masuk, kepala mini player tertutup topbar dan tak bisa dipegang
+  // lagi).
+  function clampMiniPos(left, top) {
+    const el = videoWrapRef.current;
+    const w = el?.offsetWidth || 240;
+    const h = el?.offsetHeight || 180;
+    const topbar = document.querySelector(".gp-topbar");
+    const minTop = topbar ? Math.ceil(topbar.getBoundingClientRect().bottom) : 0;
+    const maxLeft = Math.max(0, window.innerWidth - w);
+    const maxTop = Math.max(minTop, window.innerHeight - h);
+    return {
+      left: Math.round(Math.min(Math.max(0, left), maxLeft)),
+      top: Math.round(Math.min(Math.max(minTop, top), maxTop)),
+    };
+  }
   function handleDragStart(e) {
-    if (viewMode !== "mini" || !miniWrapRef.current) return;
-    const rect = miniWrapRef.current.getBoundingClientRect();
-    dragState.current = { offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top };
-    document.addEventListener("pointermove", handleDragMove);
-    document.addEventListener("pointerup", handleDragEnd);
+    if (viewMode !== "mini" || !videoWrapRef.current) return;
+    if (e.target.closest && e.target.closest("button")) return; // tombol "Perbesar" bukan pegangan geser
+    const rect = videoWrapRef.current.getBoundingClientRect();
+    dragState.current = { offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top, last: null };
+    // Pointer capture: gerakan jari/kursor tetap diterima kepala mini
+    // player walau pointer keluar dari kotaknya; tidak perlu listener
+    // document yang bisa tertinggal (stale) di antara re-render.
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
   }
   function handleDragMove(e) {
-    if (!dragState.current || !miniWrapRef.current) return;
-    const { offsetX, offsetY } = dragState.current;
-    const maxLeft = window.innerWidth - miniWrapRef.current.offsetWidth;
-    const maxTop = window.innerHeight - miniWrapRef.current.offsetHeight;
-    const left = Math.min(Math.max(0, e.clientX - offsetX), Math.max(0, maxLeft));
-    const top = Math.min(Math.max(0, e.clientY - offsetY), Math.max(0, maxTop));
-    miniWrapRef.current.style.left = `${left}px`;
-    miniWrapRef.current.style.top = `${top}px`;
-    miniWrapRef.current.style.right = "auto";
-    miniWrapRef.current.style.bottom = "auto";
-    miniWrapRef.current.style.transform = "none";
+    const st = dragState.current;
+    const el = videoWrapRef.current;
+    if (!st || !el) return;
+    const pos = clampMiniPos(e.clientX - st.offsetX, e.clientY - st.offsetY);
+    st.last = pos;
+    el.style.left = `${pos.left}px`;
+    el.style.top = `${pos.top}px`;
+    el.style.right = "auto";
+    el.style.bottom = "auto";
+    el.style.transform = "none";
   }
-  function handleDragEnd() {
+  function handleDragEnd(e) {
+    const st = dragState.current;
     dragState.current = null;
-    document.removeEventListener("pointermove", handleDragMove);
-    document.removeEventListener("pointerup", handleDragEnd);
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {}
+    if (st?.last) {
+      // Simpan ke state: dari sini React yang memegang posisinya.
+      miniPosRef.current = st.last;
+      setMiniPos(st.last);
+    }
   }
+  // Saat layar berubah (rotasi / resize / balik ke menu Mini), posisi
+  // tersimpan dijepit lagi ke dalam layar supaya tidak pernah "hilang".
+  useEffect(() => {
+    if (viewMode !== "mini") return;
+    function reclamp() {
+      const p = miniPosRef.current;
+      if (!p) return;
+      const c = clampMiniPos(p.left, p.top);
+      if (c.left !== p.left || c.top !== p.top) {
+        miniPosRef.current = c;
+        setMiniPos(c);
+      }
+    }
+    reclamp();
+    window.addEventListener("resize", reclamp);
+    window.addEventListener("orientationchange", reclamp);
+    return () => {
+      window.removeEventListener("resize", reclamp);
+      window.removeEventListener("orientationchange", reclamp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode]);
 
   // ---- Ukur ulang slot video Theater setiap kali relevan berubah ----
   useEffect(() => {
@@ -509,8 +607,8 @@ function AppInner() {
       const source = ctx.createMediaElementSource(playerRef.current);
       const gain = ctx.createGain();
       const analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.78;
+      analyser.fftSize = 1024; // resolusi cukup halus untuk memisahkan pita bass s/d treble
+      analyser.smoothingTimeConstant = 0.6; // pelunakan tambahan dilakukan sendiri di visualizer
       source.connect(analyser);
       analyser.connect(gain);
       gain.connect(ctx.destination);
@@ -693,6 +791,11 @@ function AppInner() {
       const k = keyRef.current;
       if (e.key === " " || e.code === "Space") {
         e.preventDefault();
+        // Tombol/menu yang terakhir diklik masih berfokus; menekan Space
+        // memunculkan cincin fokus bawaan browser (tampak putih). Spasi di
+        // sini sudah dipakai sebagai Play/Pause, jadi fokusnya dilepas.
+        const ae = document.activeElement;
+        if (ae && ae.tagName === "BUTTON") ae.blur();
         if (e.repeat) return;
         k.togglePlay();
         if (k.nowPlaying) showOsd(k.playing ? "Pause" : "Play");
@@ -725,33 +828,97 @@ function AppInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ---- Visualizer Audio Only (bar naik-turun mengikuti getaran audio) ----
+  // ---- Visualizer Audio Only (bar naik-turun mengikuti spektrum audio) ----
+  // Desain agar terasa hidup & bervariasi, termasuk untuk lagu bernada tinggi:
+  //  1) Bar dipetakan ke pita frekuensi berskala LOGARITMIK (60Hz-16kHz),
+  //     seperti telinga manusia -- bukan linear, yang membuat bass menguasai
+  //     hampir semua bar.
+  //  2) Tiap pita dinormalisasi terhadap "puncak terbarunya" sendiri (peluruhan
+  //     lambat), jadi nada tinggi yang energinya kecil tetap tampak bergerak
+  //     sama jelasnya dengan bass, tanpa harus dikali besar-besaran (yang dulu
+  //     membuat bar mentok penuh).
+  //  3) Kurva dibuat "mengembang" (pangkat > 1) + dibobot level absolut, jadi
+  //     bagian pelan benar-benar rendah dan hanya hentakan kuat yang tinggi.
+  //  4) Tinggi bar DIBATASI maksimum 86% -- tidak pernah penuh.
+  //  5) Naik cepat, turun pelan (attack/release) untuk gerak yang natural.
   useEffect(() => {
     if (viewMode !== "audio") return;
     const bars = barsRef.current;
+    const N = bars.length;
+    const MIN_H = 0.04;
+    const MAX_H = 0.86;
+    const FMIN = 60;
+    const FMAX = 16000;
     const setAll = (v) => bars.forEach((b) => b && (b.style.transform = `scaleY(${v})`));
     if (!playing) {
-      setAll(0.04);
+      setAll(MIN_H);
       return;
     }
     let raf;
     let t = 0;
-    const data = new Uint8Array(128);
+    let data = null;
+    let edges = null; // batas pita dalam satuan "bin", dihitung sekali per analyser
+    const peak = new Float32Array(N).fill(0.28);
+    const cur = new Float32Array(N).fill(MIN_H);
+
+    function buildEdges(an) {
+      const sr = audioCtxRef.current?.sampleRate || 44100;
+      const binHz = sr / an.fftSize;
+      const maxBin = an.frequencyBinCount - 1;
+      const ratio = FMAX / FMIN;
+      const e = new Float32Array(N + 1);
+      for (let i = 0; i <= N; i++) e[i] = Math.min(maxBin, (FMIN * Math.pow(ratio, i / N)) / binHz);
+      return e;
+    }
+    function bandLevel(lo, hi) {
+      const last = data.length - 1;
+      if (hi - lo < 1) {
+        // Pita lebih sempit dari satu bin (bass): interpolasi di titik tengahnya.
+        const c = (lo + hi) / 2;
+        const i = Math.floor(c);
+        const f = c - i;
+        return (data[i] * (1 - f) + data[Math.min(i + 1, last)] * f) / 255;
+      }
+      let max = 0;
+      let sum = 0;
+      let cnt = 0;
+      for (let k = Math.floor(lo); k <= Math.min(last, Math.ceil(hi)); k++) {
+        const d = data[k];
+        if (d > max) max = d;
+        sum += d;
+        cnt++;
+      }
+      return (0.55 * max + 0.45 * (sum / cnt)) / 255;
+    }
+
     function draw() {
       raf = requestAnimationFrame(draw);
       t += 0.07;
       const an = analyserRef.current;
-      if (an) an.getByteFrequencyData(data);
-      for (let i = 0; i < bars.length; i++) {
-        if (!bars[i]) continue;
-        let v;
-        if (an) {
-          const idx = 1 + Math.floor(Math.pow(i / bars.length, 1.6) * 88);
-          v = Math.min(1, (data[idx] / 255) * 1.3);
-        } else {
-          v = 0.3 + 0.22 * Math.sin(t * 1.4 + i * 0.55) + 0.16 * Math.sin(t * 0.7 + i * 1.3);
+      if (an) {
+        if (!data || data.length !== an.frequencyBinCount) {
+          data = new Uint8Array(an.frequencyBinCount);
+          edges = buildEdges(an);
         }
-        bars[i].style.transform = `scaleY(${Math.max(0.04, v)})`;
+        an.getByteFrequencyData(data);
+      }
+      for (let i = 0; i < N; i++) {
+        const el = bars[i];
+        if (!el) continue;
+        let target;
+        if (an && edges) {
+          const v = bandLevel(edges[i], edges[i + 1]); // 0..1 absolut
+          peak[i] = Math.max(peak[i] * 0.997, v, 0.28); // puncak terbaru pita ini
+          const norm = Math.min(1, v / peak[i]); // 0..1 relatif terhadap pitanya
+          const weight = 0.35 + 0.65 * Math.min(1, v * 1.7); // pita yang memang pelan tidak boleh tampak tinggi
+          target = MIN_H + (MAX_H - MIN_H) * Math.pow(norm, 1.55) * weight;
+        } else {
+          // Belum ada analyser (belum pernah diputar): animasi lembut sementara.
+          target = 0.2 + 0.16 * Math.sin(t * 1.4 + i * 0.55) + 0.1 * Math.sin(t * 0.7 + i * 1.3);
+        }
+        const k = target > cur[i] ? 0.6 : 0.14; // naik cepat, turun pelan
+        cur[i] += (target - cur[i]) * k;
+        el.style.transform = `scaleY(${Math.min(MAX_H, Math.max(MIN_H, cur[i])).toFixed(3)})`;
       }
     }
     draw();
@@ -759,19 +926,33 @@ function AppInner() {
   }, [viewMode, playing]);
 
   // ---- Playlist ----
-  async function handleCreatePlaylist() {
-    if (!newPlaylistName.trim()) return;
-    await createPlaylist(user.uid, newPlaylistName);
-    setNewPlaylistName("");
-    await refreshPlaylists();
+  // "Buat" (di panel Theater/Mini/Audio MAUPUN Manage Media) tidak langsung
+  // membuat playlist kosong -- dibuka dulu pop-up untuk memilih media awal.
+  function openCreatePlaylistModal(fromPanel) {
+    const name = fromPanel ? panelNewName : newPlaylistName;
+    setCreatePlaylistModal({ fromPanel });
+    setCreatePlaylistName(name);
+    setCreatePlaylistSel(new Set());
+    setCreatePlaylistSearch("");
   }
-  async function handleCreatePlaylistFromPanel() {
-    if (!panelNewName.trim()) return;
-    const id = await createPlaylist(user.uid, panelNewName);
-    setPanelNewName("");
-    setPanelNewOpen(false);
-    await refreshPlaylists();
-    setViewPlaylistId(id);
+  async function handleConfirmCreatePlaylist() {
+    if (!createPlaylistName.trim()) return;
+    setCreatePlaylistBusy(true);
+    try {
+      const id = await createPlaylist(user.uid, createPlaylistName, [...createPlaylistSel]);
+      await refreshPlaylists();
+      if (createPlaylistModal?.fromPanel) {
+        setPanelNewName("");
+        setPanelNewOpen(false);
+        setViewPlaylistId(id);
+      } else {
+        setNewPlaylistName("");
+        setManagePlaylist(id);
+      }
+      setCreatePlaylistModal(null);
+    } finally {
+      setCreatePlaylistBusy(false);
+    }
   }
   async function handleConfirmRenamePlaylist() {
     if (!renameInput.trim()) return;
@@ -787,12 +968,37 @@ function AppInner() {
     await refreshPlaylists();
   }
   async function handleAddToPlaylist(playlistId) {
-    await addTrackToPlaylist(playlistId, addToPlaylistFor.id);
+    await addTrackToPlaylist(playlistId, trackRefFor(addToPlaylistFor));
     setAddToPlaylistFor(null);
     await refreshPlaylists();
   }
+  async function handleBulkAddToPlaylist(playlistId) {
+    await addTracksToPlaylist(playlistId, bulkAddPlaylistIds);
+    setBulkAddPlaylistIds(null);
+    setManageSel(new Set());
+    await refreshPlaylists();
+  }
+  async function handleReorderPlaylists(orderedIds) {
+    setPlaylists((prev) => {
+      const byId = new Map(prev.map((p) => [p.id, p]));
+      return orderedIds.map((id) => byId.get(id)).filter(Boolean);
+    });
+    try {
+      await reorderPlaylists(orderedIds);
+    } catch {
+      await refreshPlaylists();
+    }
+  }
+  async function handleConfirmDeleteCategory() {
+    await handleRemoveCategory(deleteCategoryTarget);
+    setDeleteCategoryTarget(null);
+  }
   async function handleRemoveFromPlaylist(playlistId, mediaId) {
     await removeTrackFromPlaylist(playlistId, mediaId);
+    await refreshPlaylists();
+  }
+  async function handleRemoveManyFromPlaylist(playlistId, mediaIds) {
+    await removeTracksFromPlaylist(playlistId, mediaIds);
     await refreshPlaylists();
   }
   async function handleReorderPlaylist(playlistId, orderedIds) {
@@ -809,6 +1015,7 @@ function AppInner() {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
+    if (!isAdmin) return; // upload Explore khusus admin (server juga mengecek ulang)
     if (!/^(video|audio)\//.test(file.type)) {
       setExploreErr("Hanya file video atau musik yang bisa diunggah.");
       return;
@@ -826,10 +1033,64 @@ function AppInner() {
     }
   }
   async function handleConfirmDeleteExplore() {
-    await deleteExploreMedia(deleteExploreTarget.id);
-    if (nowPlaying?.id === deleteExploreTarget.id) setNowPlaying(null);
+    const target = deleteExploreTarget;
     setDeleteExploreTarget(null);
+    try {
+      await deleteExploreMedia(target.id);
+      if (nowPlaying?.id === target.id) {
+        setNowPlaying(null);
+        playerRef.current?.pause();
+      }
+    } catch (err) {
+      setExploreErr(err.message || "Gagal menghapus media Explore.");
+    }
     setExploreItems(await listExploreMedia());
+  }
+
+  // Admin: sembunyikan / tampilkan media untuk SEMUA pengguna.
+  async function handleToggleExploreHidden(m) {
+    const nextHidden = !m.hidden;
+    setExploreItems((prev) => prev.map((x) => (x.id === m.id ? { ...x, hidden: nextHidden } : x))); // optimistis
+    try {
+      await setExploreMediaHidden(m.id, nextHidden);
+    } catch (err) {
+      setExploreErr(err.message || "Gagal mengubah visibilitas media.");
+      setExploreItems(await listExploreMedia());
+    }
+  }
+
+  // Admin: pindahkan satu media ke kategori yang sudah ada (atau lepas dari
+  // kategorinya kalau categoryName === null).
+  async function handleAssignCategory(media, categoryName) {
+    setCategoryModalBusy(true);
+    setCategoryModalErr("");
+    try {
+      if (categoryName) await setExploreCategoryMembers(categoryName, [media.id], []);
+      else if (media.category) await setExploreCategoryMembers(media.category, [], [media.id]);
+      setExploreItems(await listExploreMedia());
+      setAssignCategoryFor(null);
+    } catch (err) {
+      setCategoryModalErr(err.message || "Gagal menyimpan kategori.");
+    } finally {
+      setCategoryModalBusy(false);
+    }
+  }
+
+  // Admin: simpan perubahan isi sebuah kategori dari popup "Edit & Tampilkan Media".
+  async function handleSaveCategoryMembers(categoryName, addIds, removeIds) {
+    setCategoryModalBusy(true);
+    setCategoryModalErr("");
+    try {
+      if (addIds.length || removeIds.length) {
+        await setExploreCategoryMembers(categoryName, addIds, removeIds);
+        setExploreItems(await listExploreMedia());
+      }
+      setCategoryMembersFor(null);
+    } catch (err) {
+      setCategoryModalErr(err.message || "Gagal menyimpan perubahan kategori.");
+    } finally {
+      setCategoryModalBusy(false);
+    }
   }
   async function handleConfirmSaveExploreLimit() {
     const mb = parseInt(exploreLimitInput, 10);
@@ -880,6 +1141,7 @@ function AppInner() {
     }
   }
   function openThumbPicker(mediaId) {
+    if (!isAdmin) return;
     thumbTargetId.current = mediaId;
     thumbFileInputRef.current?.click();
   }
@@ -887,9 +1149,13 @@ function AppInner() {
     const file = e.target.files?.[0];
     const mediaId = thumbTargetId.current;
     e.target.value = "";
-    if (!file || !mediaId) return;
-    if (!/^image\//.test(file.type)) {
-      setThumbErr("Thumbnail harus berupa gambar.");
+    if (!file || !mediaId || !isAdmin) return; // thumbnail khusus admin (server juga mengecek ulang)
+    if (!/^image\/(jpeg|png|webp|gif|avif)$/.test(file.type)) {
+      setThumbErr("Thumbnail harus berupa gambar JPG, PNG, WEBP, GIF, atau AVIF.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setThumbErr("Ukuran thumbnail maksimal 5MB.");
       return;
     }
     setThumbErr("");
@@ -908,11 +1174,22 @@ function AppInner() {
   const viewPlaylist = playlists.find((p) => p.id === viewPlaylistId);
   const panelItems = viewPlaylistId === LIBRARY_ID
     ? items
-    : (viewPlaylist ? viewPlaylist.trackIds.map((id) => items.find((m) => m.id === id)).filter(Boolean) : []);
+    : (viewPlaylist ? viewPlaylist.trackIds.map((id) => resolveTrack(id, items, exploreItems)).filter(Boolean) : []);
   const panelLabel = viewPlaylistId === LIBRARY_ID ? "Library" : viewPlaylist?.name || "Playlist";
 
   return (
-    <div className={"gramofon-player" + (playing ? " gp-is-playing" : "")}>
+    <div
+      className={"gramofon-player" + (playing ? " gp-is-playing" : "")}
+      onClick={(e) => {
+        // Setelah klik mouse/sentuh, tombol tidak perlu tetap berfokus.
+        // (detail > 0 = klik pointer; Enter/Space keyboard bernilai 0 dan
+        // fokusnya dibiarkan agar navigasi Tab tidak putus.)
+        if (e.detail > 0) {
+          const btn = e.target.closest ? e.target.closest("button") : null;
+          if (btn) btn.blur();
+        }
+      }}
+    >
       <header className="gp-topbar">
         <button className="gp-ibtn gp-menu-toggle" onClick={() => setMobileMenuOpen((v) => !v)} aria-label="Menu" data-tip-below="Menu">
           <IconMenu />
@@ -961,18 +1238,26 @@ function AppInner() {
           dijadikan kotak mengambang di mode Mini -- supaya video yang
           sedang diputar TIDAK PERNAH remount/berhenti saat ganti menu. */}
       <div
-        ref={viewMode === "mini" ? miniWrapRef : null}
+        ref={videoWrapRef}
         className={viewMode === "mini" ? "gp-mini-player" : ""}
         style={
           viewMode === "mini"
-            ? undefined
+            ? miniPos
+              ? { left: miniPos.left, top: miniPos.top, right: "auto", bottom: "auto", transform: "none" }
+              : undefined
             : videoRect
             ? { position: "fixed", top: videoRect.top, left: videoRect.left, width: videoRect.width, height: videoRect.height, zIndex: 5 }
             : { position: "fixed", width: 1, height: 1, overflow: "hidden", opacity: 0, pointerEvents: "none", top: 0, left: 0 }
         }
       >
         {viewMode === "mini" && (
-          <div className="gp-mini-head" onPointerDown={handleDragStart}>
+          <div
+            className="gp-mini-head"
+            onPointerDown={handleDragStart}
+            onPointerMove={handleDragMove}
+            onPointerUp={handleDragEnd}
+            onPointerCancel={handleDragEnd}
+          >
             <IconGrip style={{ width: 14, height: 14, color: "var(--gp-dim)" }} />
             <span className="gp-mini-title">{nowPlaying ? nowPlaying.title : "Belum ada media"}</span>
             <button className="gp-ibtn" style={{ width: 26, height: 26 }} onClick={() => setViewMode("theater")} data-tip="Perbesar">
@@ -1073,7 +1358,7 @@ function AppInner() {
               setPanelNewOpen={setPanelNewOpen}
               panelNewName={panelNewName}
               setPanelNewName={setPanelNewName}
-              onCreatePlaylist={handleCreatePlaylistFromPanel}
+              onCreatePlaylist={() => openCreatePlaylistModal(true)}
               canReorder={viewPlaylistId !== LIBRARY_ID}
               onReorder={(orderedIds) => handleReorderPlaylist(viewPlaylistId, orderedIds)}
             />
@@ -1097,7 +1382,7 @@ function AppInner() {
               setPanelNewOpen={setPanelNewOpen}
               panelNewName={panelNewName}
               setPanelNewName={setPanelNewName}
-              onCreatePlaylist={handleCreatePlaylistFromPanel}
+              onCreatePlaylist={() => openCreatePlaylistModal(true)}
               canReorder={viewPlaylistId !== LIBRARY_ID}
               onReorder={(orderedIds) => handleReorderPlaylist(viewPlaylistId, orderedIds)}
             />
@@ -1153,7 +1438,7 @@ function AppInner() {
               setPanelNewOpen={setPanelNewOpen}
               panelNewName={panelNewName}
               setPanelNewName={setPanelNewName}
-              onCreatePlaylist={handleCreatePlaylistFromPanel}
+              onCreatePlaylist={() => openCreatePlaylistModal(true)}
               canReorder={viewPlaylistId !== LIBRARY_ID}
               onReorder={(orderedIds) => handleReorderPlaylist(viewPlaylistId, orderedIds)}
             />
@@ -1182,7 +1467,7 @@ function AppInner() {
             playlists={playlists}
             newPlaylistName={newPlaylistName}
             setNewPlaylistName={setNewPlaylistName}
-            onCreatePlaylist={handleCreatePlaylist}
+            onCreatePlaylist={() => openCreatePlaylistModal(false)}
             onOpenRename={(pl) => {
               setRenamingPlaylist(pl);
               setRenameInput(pl.name);
@@ -1190,7 +1475,11 @@ function AppInner() {
             onDeletePlaylistClick={setDeletePlaylistTarget}
             onAddToPlaylistClick={setAddToPlaylistFor}
             onRemoveFromPlaylist={handleRemoveFromPlaylist}
+            onRemoveManyFromPlaylist={handleRemoveManyFromPlaylist}
             onReorderPlaylist={handleReorderPlaylist}
+            onReorderPlaylists={handleReorderPlaylists}
+            onBulkAddToPlaylist={(ids) => setBulkAddPlaylistIds(ids)}
+            exploreItems={exploreItems}
             search={manageSearch}
             setSearch={setManageSearch}
             typeFilter={manageType}
@@ -1234,8 +1523,17 @@ function AppInner() {
             newCategoryName={newCategoryName}
             setNewCategoryName={setNewCategoryName}
             onAddCategory={handleAddCategory}
-            onRemoveCategory={handleRemoveCategory}
+            onDeleteCategoryClick={setDeleteCategoryTarget}
             onReorderCategories={handleReorderCategories}
+            onToggleHidden={handleToggleExploreHidden}
+            onAssignCategoryClick={(m) => {
+              setCategoryModalErr("");
+              setAssignCategoryFor(m);
+            }}
+            onEditCategoryMembersClick={(name) => {
+              setCategoryModalErr("");
+              setCategoryMembersFor(name);
+            }}
             renamingCategory={renamingCategory}
             setRenamingCategory={setRenamingCategory}
             onConfirmRenameCategory={handleConfirmRenameCategory}
@@ -1269,7 +1567,7 @@ function AppInner() {
               type="button"
               className={"gp-ibtn gp-hide-mobile" + (shuffle ? " on" : "")}
               onClick={() => setShuffle((v) => !v)}
-              data-tip={shuffle ? "Random: on" : "Random: off"}
+              data-tip={shuffle ? "Random: On" : "Random: Off"}
             >
               <ShuffleIcon />
             </button>
@@ -1300,7 +1598,7 @@ function AppInner() {
               type="button"
               className={"gp-ibtn gp-hide-mobile" + (repeatMode !== "off" ? " on" : "")}
               onClick={cycleRepeat}
-              data-tip={repeatMode === "off" ? "Repeat: off" : repeatMode === "queue" ? "Repeat: queue" : "Repeat: Track"}
+              data-tip={repeatText(repeatMode)}
             >
               <RepeatIcon />
               {repeatMode === "track" && <span className="gp-numbadge on">1</span>}
@@ -1389,7 +1687,7 @@ function AppInner() {
           </div>
 
           <div className="gp-vol-group">
-            <button type="button" className="gp-ibtn" onClick={toggleMute} data-tip="Bisukan">
+            <button type="button" className="gp-ibtn" onClick={toggleMute} data-tip={muted || volumePercent === 0 ? "Suarakan" : "Bisukan"}>
               {muted || volumePercent === 0 ? <MuteIcon /> : <VolumeIcon />}
             </button>
             <input
@@ -1433,7 +1731,7 @@ function AppInner() {
           <div className="confirm-card" onClick={(e) => e.stopPropagation()}>
             <h3>Ubah nama playlist</h3>
             <div className="field">
-              <input value={renameInput} onChange={(e) => setRenameInput(e.target.value)} autoFocus />
+              <input value={renameInput} onChange={(e) => setRenameInput(e.target.value)} maxLength={100} autoFocus />
             </div>
             <div className="confirm-actions">
               <button className="btn btn--ghost" onClick={() => setRenamingPlaylist(null)}>
@@ -1480,6 +1778,72 @@ function AppInner() {
           </div>
         </div>
       )}
+
+      {bulkAddPlaylistIds && (
+        <div className="confirm-backdrop" onClick={() => setBulkAddPlaylistIds(null)}>
+          <div className="confirm-card" onClick={(e) => e.stopPropagation()}>
+            <h3>Tambahkan {bulkAddPlaylistIds.length} media ke playlist</h3>
+            {playlists.length === 0 ? (
+              <p className="hint-text">Belum ada playlist — buat dulu lewat tombol "Buat".</p>
+            ) : (
+              <div className="user-picker-list">
+                {playlists.map((pl) => (
+                  <button key={pl.id} type="button" className="addmenu-item" onClick={() => handleBulkAddToPlaylist(pl.id)}>
+                    {pl.name} <span className="hint-text">({pl.trackIds?.length || 0})</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="confirm-actions">
+              <button className="btn btn--ghost" onClick={() => setBulkAddPlaylistIds(null)}>
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <CreatePlaylistModal
+        open={!!createPlaylistModal}
+        name={createPlaylistName}
+        setName={setCreatePlaylistName}
+        items={items}
+        sel={createPlaylistSel}
+        setSel={setCreatePlaylistSel}
+        search={createPlaylistSearch}
+        setSearch={setCreatePlaylistSearch}
+        busy={createPlaylistBusy}
+        onCancel={() => setCreatePlaylistModal(null)}
+        onConfirm={handleConfirmCreatePlaylist}
+      />
+
+      <AssignCategoryModal
+        media={assignCategoryFor}
+        categories={exploreCategories}
+        busy={categoryModalBusy}
+        err={categoryModalErr}
+        onCancel={() => setAssignCategoryFor(null)}
+        onPick={(name) => handleAssignCategory(assignCategoryFor, name)}
+      />
+
+      <CategoryMembersModal
+        category={categoryMembersFor}
+        items={exploreItems}
+        busy={categoryModalBusy}
+        err={categoryModalErr}
+        onCancel={() => setCategoryMembersFor(null)}
+        onSave={(addIds, removeIds) => handleSaveCategoryMembers(categoryMembersFor, addIds, removeIds)}
+      />
+
+      <ConfirmDialog
+        open={!!deleteCategoryTarget}
+        title={`Hapus kategori "${deleteCategoryTarget}"?`}
+        message="Kategori ini akan dihapus dari daftar filter Explore. Media yang sudah memakai kategori ini TIDAK ikut terhapus."
+        confirmLabel="Ya, Hapus"
+        danger
+        onCancel={() => setDeleteCategoryTarget(null)}
+        onConfirm={handleConfirmDeleteCategory}
+      />
 
       <ConfirmDialog
         open={!!deleteExploreTarget}
@@ -1566,7 +1930,7 @@ function PlaybackOverlay({
     e.stopPropagation();
     if (onInteract) onInteract();
   };
-  const repeatLabel = repeatMode === "off" ? "Repeat: off" : repeatMode === "queue" ? "Repeat: queue" : "Repeat: Track";
+  const repeatLabel = repeatText(repeatMode);
 
   return (
     <div className={"gp-video-overlay" + (visible ? " show" : "")}>
@@ -1617,7 +1981,7 @@ function PlaybackOverlay({
               <div className="gp-ov-menu">
                 <button className={shuffle ? "on" : ""} onClick={act(onShuffle, false)}>
                   <ShuffleIcon />
-                  {shuffle ? "Random: on" : "Random: off"}
+                  {shuffle ? "Random: On" : "Random: Off"}
                 </button>
                 <button className={repeatMode !== "off" ? "on" : ""} onClick={act(onRepeat, false)}>
                   <RepeatIcon />
@@ -1667,6 +2031,58 @@ function VideoContextMenu({ x, y, loop, onToggleLoop, rate, onSetSpeed, onPiP, o
   );
 }
 
+function CreatePlaylistModal({ open, name, setName, items, sel, setSel, search, setSearch, busy, onCancel, onConfirm }) {
+  if (!open) return null;
+  const q = search.trim().toLowerCase();
+  const filtered = q ? items.filter((m) => (m.title || "").toLowerCase().includes(q)) : items;
+  function toggle(id) {
+    setSel((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+  return (
+    <div className="confirm-backdrop" onClick={onCancel}>
+      <div className="confirm-card confirm-card--wide" onClick={(e) => e.stopPropagation()}>
+        <h3>Buat playlist baru</h3>
+        <div className="field">
+          <label>Nama playlist</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={100} autoFocus />
+        </div>
+        <div className="field">
+          <label>
+            Pilih media awal <span className="hint-inline">(opsional — {sel.size} dipilih)</span>
+          </label>
+          <input placeholder="Cari judul di Library..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ marginBottom: 8 }} />
+        </div>
+        <div className="user-picker-list">
+          {filtered.length === 0 ? (
+            <p className="hint-text" style={{ padding: 12 }}>
+              {items.length === 0 ? "Belum ada media di Library." : "Tidak ada yang cocok."}
+            </p>
+          ) : (
+            filtered.map((m) => (
+              <label className="user-picker-row" key={m.id}>
+                <input type="checkbox" checked={sel.has(m.id)} onChange={() => toggle(m.id)} />
+                <span className="user-picker-row__name">{m.title}</span>
+              </label>
+            ))
+          )}
+        </div>
+        <div className="confirm-actions">
+          <button className="btn btn--ghost" onClick={onCancel} disabled={busy}>
+            Batal
+          </button>
+          <button className="btn btn--primary" onClick={onConfirm} disabled={busy || !name.trim()}>
+            {busy ? "Membuat..." : "Buat Playlist"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PlaylistPanel({
   playlists,
   viewPlaylistId,
@@ -1685,6 +2101,19 @@ function PlaylistPanel({
 }) {
   const [dragIdx, setDragIdx] = useState(null);
   const [overIdx, setOverIdx] = useState(null);
+  const newHeadRef = useRef(null);
+  const newRowRef = useRef(null);
+
+  useEffect(() => {
+    if (!panelNewOpen) return;
+    function onDocClick(e) {
+      const inHead = newHeadRef.current && newHeadRef.current.contains(e.target);
+      const inRow = newRowRef.current && newRowRef.current.contains(e.target);
+      if (!inHead && !inRow) setPanelNewOpen(false);
+    }
+    document.addEventListener("pointerdown", onDocClick);
+    return () => document.removeEventListener("pointerdown", onDocClick);
+  }, [panelNewOpen, setPanelNewOpen]);
 
   function handleDrop(idx) {
     if (dragIdx === null || dragIdx === idx) {
@@ -1702,7 +2131,7 @@ function PlaylistPanel({
 
   return (
     <aside className="gp-panel">
-      <div className="gp-panel-head">
+      <div className="gp-panel-head" ref={newHeadRef}>
         <div className="gp-select-wrap">
           <select value={viewPlaylistId} onChange={(e) => setViewPlaylistId(e.target.value)}>
             <option value={LIBRARY_ID}>Library (semua media)</option>
@@ -1718,10 +2147,11 @@ function PlaylistPanel({
         </button>
       </div>
       {panelNewOpen && (
-        <div className="gp-panel-newrow">
+        <div className="gp-panel-newrow" ref={newRowRef}>
           <input
             autoFocus
             placeholder="Nama playlist baru..."
+            maxLength={100}
             value={panelNewName}
             onChange={(e) => setPanelNewName(e.target.value)}
             onKeyDown={(e) => {
@@ -1801,6 +2231,130 @@ function PlaylistPanel({
   );
 }
 
+// Popup: pilih SATU kategori yang sudah ada untuk satu media Explore (admin).
+function AssignCategoryModal({ media, categories, busy, err, onCancel, onPick }) {
+  if (!media) return null;
+  return (
+    <div className="confirm-backdrop" onClick={busy ? undefined : onCancel}>
+      <div className="confirm-card" onClick={(e) => e.stopPropagation()}>
+        <h3>Tambah ke kategori</h3>
+        <p className="hint-text" style={{ marginBottom: 10 }}>
+          &ldquo;{media.title}&rdquo; hanya bisa berada di satu kategori.
+        </p>
+        {categories.length === 0 ? (
+          <p className="hint-text">Belum ada kategori — buat dulu lewat panel Kelola Kategori.</p>
+        ) : (
+          <div className="user-picker-list">
+            {categories.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={"addmenu-item" + (media.category === c ? " is-picked" : "")}
+                disabled={busy || media.category === c}
+                onClick={() => onPick(c)}
+              >
+                {c} {media.category === c && <span className="hint-text">(saat ini)</span>}
+              </button>
+            ))}
+            {media.category && (
+              <button type="button" className="addmenu-item" disabled={busy} onClick={() => onPick(null)}>
+                Lepas dari kategori <span className="hint-text">(tanpa kategori)</span>
+              </button>
+            )}
+          </div>
+        )}
+        {err && <p className="error-text" style={{ marginTop: 8 }}>{err}</p>}
+        <div className="confirm-actions" style={{ marginTop: 12 }}>
+          <button className="btn btn--ghost" onClick={onCancel} disabled={busy}>
+            Tutup
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Popup "Edit & Tampilkan Media": daftar media di sebuah kategori + tempat
+// mengubah media mana saja yang termasuk di dalamnya (admin).
+function CategoryMembersModal({ category, items, busy, err, onCancel, onSave }) {
+  const [sel, setSel] = useState(new Set());
+  const [search, setSearch] = useState("");
+  const initial = useMemo(
+    () => new Set(category ? items.filter((m) => m.category === category).map((m) => m.id) : []),
+    [category, items]
+  );
+
+  // Setiap kali popup dibuka untuk kategori tertentu, mulai dari isi sebenarnya.
+  useEffect(() => {
+    setSel(new Set(initial));
+    setSearch("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category]);
+
+  if (!category) return null;
+
+  const q = search.trim().toLowerCase();
+  const ordered = [...items]
+    .filter((m) => !q || (m.title || "").toLowerCase().includes(q))
+    .sort((a, b) => {
+      const ai = initial.has(a.id) ? 0 : 1;
+      const bi = initial.has(b.id) ? 0 : 1;
+      return ai - bi || (a.title || "").localeCompare(b.title || "");
+    });
+  const addIds = [...sel].filter((id) => !initial.has(id));
+  const removeIds = [...initial].filter((id) => !sel.has(id));
+  const changed = addIds.length + removeIds.length > 0;
+
+  function toggle(id) {
+    setSel((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  return (
+    <div className="confirm-backdrop" onClick={busy ? undefined : onCancel}>
+      <div className="confirm-card confirm-card--wide" onClick={(e) => e.stopPropagation()}>
+        <h3>Media di kategori &ldquo;{category}&rdquo;</h3>
+        <div className="field" style={{ marginBottom: 8 }}>
+          <label>
+            Centang media yang termasuk kategori ini <span className="hint-inline">({sel.size} dipilih)</span>
+          </label>
+          <input placeholder="Cari judul..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+        <div className="user-picker-list user-picker-list--tall">
+          {ordered.length === 0 ? (
+            <p className="hint-text" style={{ padding: 12 }}>
+              {items.length === 0 ? "Belum ada media di Explore." : "Tidak ada yang cocok."}
+            </p>
+          ) : (
+            ordered.map((m) => (
+              <label className="user-picker-row" key={m.id}>
+                <input type="checkbox" checked={sel.has(m.id)} onChange={() => toggle(m.id)} disabled={busy} />
+                <span className="user-picker-row__name">{m.title}</span>
+                {m.category && m.category !== category && (
+                  <span className="gp-mini-tag" title="Akan dipindahkan dari kategori ini">{m.category}</span>
+                )}
+                {m.hidden && <span className="gp-mini-tag is-hidden">Hidden</span>}
+              </label>
+            ))
+          )}
+        </div>
+        {err && <p className="error-text" style={{ marginTop: 8 }}>{err}</p>}
+        <div className="confirm-actions" style={{ marginTop: 12 }}>
+          <button className="btn btn--ghost" onClick={onCancel} disabled={busy}>
+            Batal
+          </button>
+          <button className="btn btn--primary" onClick={() => onSave(addIds, removeIds)} disabled={busy || !changed}>
+            {busy ? "Menyimpan..." : "Simpan"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ManageMediaView({
   items,
   loading,
@@ -1827,7 +2381,11 @@ function ManageMediaView({
   onDeletePlaylistClick,
   onAddToPlaylistClick,
   onRemoveFromPlaylist,
+  onRemoveManyFromPlaylist,
   onReorderPlaylist,
+  onReorderPlaylists,
+  onBulkAddToPlaylist,
+  exploreItems,
   search,
   setSearch,
   typeFilter,
@@ -1843,6 +2401,8 @@ function ManageMediaView({
   const [dragIdx, setDragIdx] = useState(null);
   const [overIdx, setOverIdx] = useState(null);
   const [page, setPage] = useState(1);
+  const [plDragIdx, setPlDragIdx] = useState(null);
+  const [plOverIdx, setPlOverIdx] = useState(null);
 
   const activePlaylist = playlistFilter === "all" ? null : playlists.find((p) => p.id === playlistFilter);
   const canDrag = !!activePlaylist && !search.trim() && typeFilter === "all";
@@ -1850,7 +2410,7 @@ function ManageMediaView({
   let rows = playlistFilter === "all"
     ? items
     : activePlaylist
-    ? activePlaylist.trackIds.map((id) => items.find((m) => m.id === id)).filter(Boolean)
+    ? activePlaylist.trackIds.map((id) => resolveTrack(id, items, exploreItems)).filter(Boolean)
     : [];
 
   if (typeFilter !== "all") rows = rows.filter((m) => m.resourceType === typeFilter);
@@ -1876,6 +2436,14 @@ function ManageMediaView({
     setPage(1);
   }, [search, typeFilter, playlistFilter, sortBy]);
 
+  // Pilihan ("Pilih semua" mencakup SEMUA hasil, lintas halaman) dikosongkan
+  // setiap kali daftar yang tampil berganti -- supaya aksi massal tidak
+  // pernah mengenai item yang sudah tidak terlihat oleh pengguna.
+  useEffect(() => {
+    setSel(new Set());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, typeFilter, playlistFilter]);
+
   function toggleRow(id) {
     setSel((prev) => {
       const next = new Set(prev);
@@ -1883,24 +2451,35 @@ function ManageMediaView({
       return next;
     });
   }
+  // "Pilih semua" = SEMUA media yang cocok dengan filter/pencarian saat ini
+  // (lintas semua halaman), bukan hanya yang tampil di halaman aktif.
+  const allSelected = rows.length > 0 && rows.every((m) => sel.has(m.id));
   function toggleAll() {
-    const allChecked = pageRows.length > 0 && pageRows.every((m) => sel.has(m.id));
-    setSel((prev) => {
-      const next = new Set(prev);
-      pageRows.forEach((m) => (allChecked ? next.delete(m.id) : next.add(m.id)));
-      return next;
-    });
+    setSel(allSelected ? new Set() : new Set(rows.map((m) => m.id)));
   }
   function bulkDelete() {
     const ids = [...sel];
     if (activePlaylist) {
       (async () => {
-        for (const id of ids) await onRemoveFromPlaylist(activePlaylist.id, id);
+        await onRemoveManyFromPlaylist(activePlaylist.id, ids);
         setSel(new Set());
       })();
     } else {
       onBulkDelete(ids);
     }
+  }
+  function handlePlaylistDrop(idx) {
+    if (plDragIdx === null || plDragIdx === idx) {
+      setPlDragIdx(null);
+      setPlOverIdx(null);
+      return;
+    }
+    const ids = playlists.map((p) => p.id);
+    const [moved] = ids.splice(plDragIdx, 1);
+    ids.splice(idx, 0, moved);
+    onReorderPlaylists(ids);
+    setPlDragIdx(null);
+    setPlOverIdx(null);
   }
   function handleRowDrop(idx) {
     if (dragIdx === null || dragIdx === idx || !activePlaylist) {
@@ -1953,7 +2532,7 @@ function ManageMediaView({
           </ul>
         </div>
 
-        <div className="gp-card gp-card--fill">
+        <div className="gp-card gp-card--fill gp-card--bound">
           <div className="gp-card-title">
             <h3>Playlist</h3>
           </div>
@@ -1962,21 +2541,46 @@ function ManageMediaView({
               className={"gp-pl-row" + (playlistFilter === "all" ? " is-active" : "")}
               onClick={() => setPlaylistFilter("all")}
             >
+              <span className="gp-drag-spacer" aria-hidden="true" />
               <div className="gp-info">
                 <b>Library (Semua media)</b>
                 <small>{items.length} media</small>
               </div>
             </li>
-            {playlists.map((pl) => (
+            {playlists.map((pl, idx) => (
               <li
                 key={pl.id}
-                className={"gp-pl-row" + (playlistFilter === pl.id ? " is-active" : "")}
+                className={
+                  "gp-pl-row" +
+                  (playlistFilter === pl.id ? " is-active" : "") +
+                  (plDragIdx === idx ? " is-dragging" : "") +
+                  (plOverIdx === idx ? " is-dragover" : "")
+                }
                 onClick={() => setPlaylistFilter(pl.id)}
+                draggable
+                onDragStart={() => setPlDragIdx(idx)}
+                onDragOver={(e) => { e.preventDefault(); setPlOverIdx(idx); }}
+                onDrop={() => handlePlaylistDrop(idx)}
+                onDragEnd={() => { setPlDragIdx(null); setPlOverIdx(null); }}
               >
+                <span className="gp-drag-handle" data-tip="Geser untuk urutkan" onClick={(e) => e.stopPropagation()}>
+                  <IconGrip style={{ width: 14, height: 14 }} />
+                </span>
                 <div className="gp-info">
                   <b>{pl.name}</b>
                   <small>{pl.trackIds?.length || 0} media</small>
                 </div>
+                <button
+                  className="gp-ibtn"
+                  style={{ width: 28, height: 28 }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPlaylistFilter(pl.id);
+                  }}
+                  data-tip="Lihat & edit daftar media"
+                >
+                  <IconListEdit style={{ width: 14, height: 14 }} />
+                </button>
                 <button
                   className="gp-ibtn"
                   style={{ width: 28, height: 28 }}
@@ -2005,6 +2609,7 @@ function ManageMediaView({
           <div className="gp-new-playlist">
             <input
               placeholder="Nama playlist baru..."
+              maxLength={100}
               value={newPlaylistName}
               onChange={(e) => setNewPlaylistName(e.target.value)}
               onKeyDown={(e) => {
@@ -2054,12 +2659,32 @@ function ManageMediaView({
         </button>
       </div>
 
-      {selectMode && sel.size > 0 && (
+      {selectMode && rows.length > 0 && (
         <div className="gp-bulkbar">
-          <span>{sel.size} dipilih</span>
-          <button className="gp-link" style={{ color: "var(--gp-danger)", marginLeft: "auto" }} onClick={bulkDelete}>
-            {activePlaylist ? "Keluarkan dari playlist" : "Hapus terpilih"}
-          </button>
+          <label className="gp-selectall">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              ref={(el) => {
+                if (el) el.indeterminate = sel.size > 0 && !allSelected;
+              }}
+              onChange={toggleAll}
+            />
+            <span>Pilih semua ({rows.length})</span>
+          </label>
+          <span className="gp-muted">{sel.size} dipilih</span>
+          {sel.size > 0 && (
+            <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              {!activePlaylist && (
+                <button className="gp-btn sm" onClick={() => onBulkAddToPlaylist([...sel])}>
+                  Tambahkan ke playlist
+                </button>
+              )}
+              <button className="gp-btn sm danger" onClick={bulkDelete}>
+                {activePlaylist ? "Keluarkan dari playlist" : "Hapus terpilih"}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -2077,7 +2702,15 @@ function ManageMediaView({
                 {canDrag && <th className="gp-drag-col"></th>}
                 {selectMode && (
                   <th style={{ width: 32 }}>
-                    <input type="checkbox" checked={pageRows.length > 0 && pageRows.every((m) => sel.has(m.id))} onChange={toggleAll} />
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = sel.size > 0 && !allSelected;
+                      }}
+                      onChange={toggleAll}
+                      aria-label="Pilih semua media"
+                    />
                   </th>
                 )}
                 <th>Judul</th>
@@ -2194,7 +2827,7 @@ function ExploreView({
   newCategoryName,
   setNewCategoryName,
   onAddCategory,
-  onRemoveCategory,
+  onDeleteCategoryClick,
   onReorderCategories,
   renamingCategory,
   setRenamingCategory,
@@ -2202,9 +2835,18 @@ function ExploreView({
   onThumbClick,
   thumbUploadingId,
   thumbErr,
+  onToggleHidden,
+  onAssignCategoryClick,
+  onEditCategoryMembersClick,
 }) {
   const [catDragIdx, setCatDragIdx] = useState(null);
   const [catOverIdx, setCatOverIdx] = useState(null);
+  const [page, setPage] = useState(1);
+
+  // Hook harus dipanggil sebelum return bersyarat apa pun.
+  useEffect(() => {
+    setPage(1);
+  }, [search, activeCategory]);
 
   if (!loadingExplore && !exploreOn && !isAdmin) {
     return (
@@ -2221,6 +2863,10 @@ function ExploreView({
   let filtered = q ? items.filter((m) => (m.title || "").toLowerCase().includes(q)) : items;
   if (activeCategory !== "all") filtered = filtered.filter((m) => (m.category || null) === activeCategory);
   const queueLabel = activeCategory === "all" ? "Explore" : `Explore · ${activeCategory}`;
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / EXPLORE_PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageItems = filtered.slice((currentPage - 1) * EXPLORE_PAGE_SIZE, currentPage * EXPLORE_PAGE_SIZE);
 
   function handleCatDrop(idx) {
     if (catDragIdx === null || catDragIdx === idx) {
@@ -2251,7 +2897,7 @@ function ExploreView({
 
       {isAdmin && (
         <div className="gp-manage-grid">
-          <div className="gp-card">
+          <div className="gp-card gp-card--fill">
             <div className="gp-card-title">
               <h3>Kelola Explore</h3>
             </div>
@@ -2263,35 +2909,35 @@ function ExploreView({
             <div className="gp-stack">
               <i className="gp-seg-v" style={{ width: `${usedPct}%` }} />
             </div>
-            <div className="gp-admin-limit">
-              <div className="gp-admin-limit__row">
-                <input type="number" min="1" value={limitInput} onChange={(e) => setLimitInput(e.target.value)} />
-                <span className="gp-muted">MB</span>
-              </div>
-              <button className="gp-btn sm" onClick={onSaveLimitClick}>Simpan Batas</button>
 
-              <select className="gp-select-plain" value={uploadCategory} onChange={(e) => setUploadCategory(e.target.value)}>
-                <option value="">Tanpa kategori</option>
-                {categories.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-              <input ref={fileInputRef} type="file" accept={ACCEPTED_TYPES} style={{ display: "none" }} onChange={onFileChange} />
-              <button className="gp-btn primary" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-                <IconPlus style={{ width: 16, height: 16 }} />
-                {uploading ? `Mengunggah... ${progress}%` : "Tambah ke Explore"}
-              </button>
+            <div className="gp-admin-rows">
+              <div className="gp-admin-row">
+                <div className="gp-field">
+                  <input type="number" min="1" value={limitInput} onChange={(e) => setLimitInput(e.target.value)} />
+                  <span className="gp-muted">MB</span>
+                </div>
+                <button className="gp-btn" onClick={onSaveLimitClick}>Simpan Batas</button>
+              </div>
+              <div className="gp-admin-row">
+                <select className="gp-select-plain" value={uploadCategory} onChange={(e) => setUploadCategory(e.target.value)}>
+                  <option value="">Tanpa kategori</option>
+                  {categories.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+                <input ref={fileInputRef} type="file" accept={ACCEPTED_TYPES} style={{ display: "none" }} onChange={onFileChange} />
+                <button className="gp-btn primary" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+                  {uploading ? `Mengunggah... ${progress}%` : "Upload ke Explore"}
+                </button>
+              </div>
             </div>
             {err && <p className="error-text" style={{ marginTop: 10 }}>{err}</p>}
           </div>
 
-          <div className="gp-card">
+          <div className="gp-card gp-card--fill gp-card--bound">
             <div className="gp-card-title">
               <h3>Kelola Kategori</h3>
             </div>
-            <p className="gp-muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
-              Geser untuk mengurutkan. Kategori tampil ke pengguna sebagai filter di Explore.
-            </p>
             {categories.length === 0 ? (
               <p className="gp-muted" style={{ fontSize: 12.5 }}>Belum ada kategori.</p>
             ) : (
@@ -2323,18 +2969,21 @@ function ExploreView({
                     ) : (
                       <span className="gp-catname">{c}</span>
                     )}
+                    <button className="gp-ibtn" style={{ width: 26, height: 26 }} onClick={() => onEditCategoryMembersClick(c)} data-tip="Edit & Tampilkan Media">
+                      <IconListEdit style={{ width: 13, height: 13 }} />
+                    </button>
                     <button className="gp-ibtn" style={{ width: 26, height: 26 }} onClick={() => setRenamingCategory({ old: c, input: c })} data-tip="Ubah nama">
                       <IconPencil style={{ width: 13, height: 13 }} />
                     </button>
-                    <button className="gp-ibtn" style={{ width: 26, height: 26 }} onClick={() => onRemoveCategory(c)} data-tip="Hapus kategori">
+                    <button className="gp-ibtn" style={{ width: 26, height: 26 }} onClick={() => onDeleteCategoryClick(c)} data-tip="Hapus kategori">
                       <IconTrash style={{ width: 13, height: 13 }} />
                     </button>
                   </li>
                 ))}
               </ul>
             )}
-            <div className="gp-new-playlist">
-              <input placeholder="Nama kategori baru..." value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") onAddCategory(); }} />
+            <div className="gp-new-playlist gp-new-category">
+              <input placeholder="Nama kategori baru..." maxLength={60} value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") onAddCategory(); }} />
               <button className="gp-btn sm primary" onClick={onAddCategory}>Tambah</button>
             </div>
           </div>
@@ -2360,11 +3009,12 @@ function ExploreView({
       ) : filtered.length === 0 ? (
         <div className="gp-table-empty">Belum ada media di Explore.</div>
       ) : (
+        <>
         <div className="gp-card-grid">
-          {filtered.map((m) => {
+          {pageItems.map((m) => {
             const thumb = mediaThumb(m);
             return (
-            <div key={m.id} className={"gp-xcard" + (nowPlayingId === m.id ? " is-current" : "")}>
+            <div key={m.id} className={"gp-xcard" + (nowPlayingId === m.id ? " is-current" : "") + (m.hidden ? " is-hidden" : "")}>
               <div className="gp-xthumb" style={thumb ? { backgroundImage: `url(${thumb})` } : undefined} onClick={() => onPlay(m, filtered, queueLabel)}>
                 <span className="gp-type-badge">
                   {m.resourceType === "video" ? <IconFilm /> : <IconMusic />}
@@ -2373,15 +3023,33 @@ function ExploreView({
                   <PlayIcon style={{ width: 16, height: 16 }} />
                 </span>
                 {isAdmin && (
-                  <span className="gp-xadmin">
+                  <span className="gp-xadmin" onClick={(e) => e.stopPropagation()}>
                     <button
+                      type="button"
+                      className={"gp-vis-btn " + (m.hidden ? "is-hidden" : "is-visible")}
+                      onClick={(e) => { e.stopPropagation(); onToggleHidden(m); }}
+                      data-tip={m.hidden ? "Klik: tampilkan" : "Klik: sembunyikan"}
+                      aria-pressed={!!m.hidden}
+                    >
+                      {m.hidden ? <IconEyeOff style={{ width: 13, height: 13 }} /> : <IconEye style={{ width: 13, height: 13 }} />}
+                      <span>{m.hidden ? "Hidden" : "Visible"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onAssignCategoryClick(m); }}
+                      data-tip="Tambah ke kategori"
+                    >
+                      <IconPlus style={{ width: 13, height: 13 }} />
+                    </button>
+                    <button
+                      type="button"
                       onClick={(e) => { e.stopPropagation(); onThumbClick(m.id); }}
                       data-tip="Upload thumbnail"
                       disabled={thumbUploadingId === m.id}
                     >
                       {thumbUploadingId === m.id ? <span style={{ fontSize: 9 }}>...</span> : <IconImage style={{ width: 13, height: 13 }} />}
                     </button>
-                    <button onClick={(e) => { e.stopPropagation(); onDelete(m); }} data-tip="Hapus dari Explore">
+                    <button type="button" onClick={(e) => { e.stopPropagation(); onDelete(m); }} data-tip="Hapus dari Explore">
                       <IconTrash style={{ width: 13, height: 13 }} />
                     </button>
                   </span>
@@ -2398,6 +3066,18 @@ function ExploreView({
             );
           })}
         </div>
+        {totalPages > 1 && (
+          <div className="pagination">
+            <button className="pagination__btn" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>‹</button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+              <button key={p} className={"pagination__btn" + (p === currentPage ? " is-active" : "")} onClick={() => setPage(p)}>
+                {p}
+              </button>
+            ))}
+            <button className="pagination__btn" disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)}>›</button>
+          </div>
+        )}
+        </>
       )}
     </div>
   );
@@ -2613,6 +3293,15 @@ function IconLoop(props) {
   );
 }
 
+function IconListEdit(props) {
+  return (
+    <svg className="gp-ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M3 6h11" /><path d="M3 12h7" /><path d="M3 18h5" />
+      <path d="M17.5 14.5 21 18l-3.7 1.2 1.2-3.7Z" />
+      <path d="m19.3 12.7 2 2" />
+    </svg>
+  );
+}
 function IconGear(props) {
   return (
     <svg className="gp-ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -2622,6 +3311,22 @@ function IconGear(props) {
   );
 }
 
+function IconEye(props) {
+  return (
+    <svg className="gp-ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+function IconEyeOff(props) {
+  return (
+    <svg className="gp-ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M9.9 5.2A9.9 9.9 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4.1" />
+      <path d="M6.5 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7c1.7 0 3.2-.5 4.5-1.2" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /><path d="m3 3 18 18" />
+    </svg>
+  );
+}
 function IconImage(props) {
   return (
     <svg className="gp-ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" {...props}>

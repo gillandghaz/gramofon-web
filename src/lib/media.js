@@ -1,5 +1,6 @@
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { auth, db } from "./firebase";
+import { uploadToCloudinary } from "./cloudinary-upload";
 
 // Sama seperti listAllUsers()/listNotifications(): ambil semua dulu,
 // urutkan di client — menghindari bug orderBy() yang menyembunyikan
@@ -56,35 +57,26 @@ export async function uploadMediaFile(file, title, onProgress) {
   });
   const signBody = await signRes.json().catch(() => ({}));
   if (!signRes.ok) throw new Error(signBody.error || "Gagal meminta izin upload.");
-  const { signature, timestamp, folder, apiKey, cloudName } = signBody;
 
-  // Langkah 2: upload langsung ke Cloudinary (pakai XHR, bukan fetch,
-  // supaya bisa melaporkan progres upload ke UI lewat onProgress).
-  const cloudinaryResult = await new Promise((resolve, reject) => {
-    const form = new FormData();
-    form.append("file", file);
-    form.append("api_key", apiKey);
-    form.append("timestamp", timestamp);
-    form.append("signature", signature);
-    form.append("folder", folder);
-
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`);
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
-    };
-    xhr.onload = () => {
-      try {
-        const data = JSON.parse(xhr.responseText);
-        if (xhr.status >= 200 && xhr.status < 300) resolve(data);
-        else reject(new Error(data?.error?.message || "Upload ke Cloudinary gagal."));
-      } catch {
-        reject(new Error("Respons Cloudinary tidak terbaca."));
-      }
-    };
-    xhr.onerror = () => reject(new Error("Koneksi terputus saat upload."));
-    xhr.send(form);
+  // Langkah 2: upload langsung ke Cloudinary (XHR supaya ada progres).
+  // Endpoint "video" menangani video DAN musik, dan -- bersama
+  // allowed_formats yang ikut ditandatangani -- menolak file jenis lain.
+  const cloudinaryResult = await uploadToCloudinary({
+    payload: signBody,
+    file,
+    resourceType: "video",
+    onProgress,
   });
+
+  // PENTING: Cloudinary TIDAK punya resource_type "audio" -- file musik
+  // (mp3/wav/dll) tetap dilaporkan sebagai resource_type "video" oleh
+  // Cloudinary sendiri (audio ditangani lewat pipeline video mereka).
+  // Kalau kita ikut-ikutan memakai cloudinaryResult.resource_type apa
+  // adanya, SEMUA musik akan tersimpan sebagai "video" -- itu sebabnya
+  // web tidak bisa membedakan Video vs Audio. Di sini kita tentukan
+  // sendiri dari MIME type file ASLI (sudah divalidasi video/audio
+  // sebelum upload), bukan dari respons Cloudinary.
+  const resourceType = file.type.startsWith("audio/") ? "audio" : "video";
 
   // Langkah 3: konfirmasi ke server kita — di sinilah kuota BENAR-BENAR
   // ditegakkan (pakai ukuran asli dari Cloudinary, bukan klaim browser).
@@ -94,7 +86,7 @@ export async function uploadMediaFile(file, title, onProgress) {
     body: JSON.stringify({
       publicId: cloudinaryResult.public_id,
       bytes: cloudinaryResult.bytes,
-      resourceType: cloudinaryResult.resource_type,
+      resourceType,
       format: cloudinaryResult.format,
       secureUrl: cloudinaryResult.secure_url,
       durationSeconds: cloudinaryResult.duration || null,

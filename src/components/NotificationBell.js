@@ -100,8 +100,15 @@ export default function NotificationBell() {
         )}
       </button>
 
+      {/* Latar pudar + blur di belakang daftar notifikasi (sama seperti saat
+          isi notifikasi dibuka). Gaya hanya didefinisikan untuk halaman /app
+          (gramofon-player.css); di halaman lain elemen ini kosong tanpa efek.
+          Berada di dalam .notif-wrap, jadi klik padanya ditangani langsung
+          di sini, bukan oleh pendeteksi klik-di-luar. */}
+      {open && <div className="notif-list-backdrop" onClick={() => setOpen(false)} aria-hidden="true" />}
+
       {open && (
-        <div className="notif-panel">
+        <div className="notif-panel" role="dialog" aria-label="Daftar notifikasi">
           <div className="notif-panel__head">
             Notifikasi{" "}
             {unreadCount > 0 && (

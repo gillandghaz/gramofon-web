@@ -34,6 +34,14 @@
   position:relative;
 }
 .gramofon-player *{box-sizing:border-box}
+.gramofon-player{-webkit-tap-highlight-color:transparent}
+/* Cincin fokus bawaan browser tampak PUTIH di tema gelap (muncul setelah klik
+   menu lalu tekan Spasi). Diganti cincin tipis beraksen, hanya untuk navigasi
+   keyboard (Tab); klik mouse/sentuh tidak memunculkan apa pun. */
+.gramofon-player button{outline:none}
+.gramofon-player button:focus:not(:focus-visible){outline:none;box-shadow:none}
+.gramofon-player button:focus-visible{outline:2px solid rgba(51,217,196,.55);outline-offset:-2px}
+.gramofon-player .gp-menu-item,.gramofon-player .gp-brand,.gramofon-player .gp-ibtn{-webkit-user-select:none;user-select:none;touch-action:manipulation}
 :where(.gramofon-player) button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
 :where(.gramofon-player) :is(input,select,textarea){font:inherit;color:inherit}
 :where(.gramofon-player) :is(h1,h2,h3,p){margin:0}
@@ -68,6 +76,17 @@
   white-space:normal;max-width:280px;text-align:left;line-height:1.4;
   display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;
 }
+/* Tooltip pegangan geser ("Geser untuk urutkan"): muncul di SAMPING kanan
+   pegangan. Posisi lama (di atas, ditengahkan) terpotong oleh kontainer
+   daftar yang bisa discroll (overflow) dan oleh tepi kiri kartu. */
+.gramofon-player .gp-drag-handle[data-tip]::after,.gramofon-player .gp-drag-col[data-tip]::after{bottom:auto;top:50%;left:calc(100% + 8px);transform:translate(-4px,-50%)}
+.gramofon-player .gp-drag-handle[data-tip]:hover::after,.gramofon-player .gp-drag-col[data-tip]:hover::after{transform:translate(0,-50%)}
+.gramofon-player .gp-drag-handle[data-tip]::before,.gramofon-player .gp-drag-col[data-tip]::before{bottom:auto;top:50%;left:calc(100% + 3px);transform:translateY(-50%);border-top-color:transparent;border-right-color:#0b0f17}
+/* Tombol aksi di baris playlist/kategori: tooltip ke KIRI (di atas nama),
+   supaya baris paling atas tidak terpotong tepi atas daftar. */
+.gramofon-player .gp-pl-row .gp-ibtn[data-tip]::after,.gramofon-player .gp-catrow .gp-ibtn[data-tip]::after{bottom:auto;top:50%;left:auto;right:calc(100% + 8px);transform:translate(4px,-50%)}
+.gramofon-player .gp-pl-row .gp-ibtn[data-tip]:hover::after,.gramofon-player .gp-catrow .gp-ibtn[data-tip]:hover::after{transform:translate(0,-50%)}
+.gramofon-player .gp-pl-row .gp-ibtn[data-tip]::before,.gramofon-player .gp-catrow .gp-ibtn[data-tip]::before{bottom:auto;top:50%;left:auto;right:calc(100% + 3px);transform:translateY(-50%);border-top-color:transparent;border-left-color:#0b0f17}
 @media (hover:none){ .gramofon-player [data-tip]::after,.gramofon-player [data-tip]::before{display:none} }
 
 /* ---------- tombol umum ---------- */
@@ -82,9 +101,12 @@
 .gramofon-player .gp-ibtn{width:36px;height:36px;border-radius:50%;display:inline-grid;place-items:center;color:var(--gp-muted);transition:background .15s,color .15s;position:relative;flex:none}
 .gramofon-player .gp-ibtn:hover{background:rgba(255,255,255,.08);color:var(--gp-text)}
 .gramofon-player .gp-ibtn.on{color:var(--gp-accent)}
-.gramofon-player .gp-ibtn.on::after{content:"";position:absolute;bottom:5px;left:50%;width:4px;height:4px;border-radius:50%;background:var(--gp-accent);transform:translateX(-50%)}
+/* Titik penanda "menyala" (Random/Repeat) digambar lewat background, BUKAN
+   ::after -- ::after dipakai tooltip ([data-tip]), dan versi lama menimpanya
+   sehingga tooltip berubah jadi titik/kotak kecil saat tombol menyala. */
+.gramofon-player .gp-ibtn.on{background-image:radial-gradient(circle at 50% calc(100% - 7px),var(--gp-accent) 0 2px,transparent 2.6px)}
+.gramofon-player .gp-ibtn.on:has(.gp-numbadge),.gramofon-player .gp-sleep-btn.on{background-image:none}
 .gramofon-player .gp-ibtn:disabled{opacity:.35;cursor:not-allowed}
-.gramofon-player .gp-sleep-btn.on::after{display:none}
 .gramofon-player .gp-numbadge{position:absolute;right:1px;bottom:1px;min-width:13px;height:13px;padding:0 3px;border-radius:999px;background:var(--gp-muted);color:var(--gp-bg-2);font-size:8.5px;font-weight:700;line-height:13px;text-align:center;pointer-events:none;transition:background .15s}
 .gramofon-player .gp-ibtn:hover .gp-numbadge{background:var(--gp-text)}
 .gramofon-player .gp-numbadge.on{background:var(--gp-accent);color:var(--gp-accent-ink)}
@@ -116,7 +138,14 @@
 /* Restyle komponen bersama (NotificationBell, ProfileMenu, ConfirmDialog,
    .btn/.field global) SUPAYA cocok tema gelap Gramofon -- hanya berlaku
    di dalam .gramofon-player. */
-.gramofon-player .iconbtn-bell,.gramofon-player .topbar-avatar{background:rgba(255,255,255,.07)}
+.gramofon-player .iconbtn-bell,.gramofon-player .topbar-avatar{background:rgba(255,255,255,.07);width:34px;height:34px;min-width:34px;min-height:34px;flex:none;padding:0;border:0;border-radius:50%;display:flex;align-items:center;justify-content:center;line-height:1;overflow:hidden}
+.gramofon-player .iconbtn-bell{overflow:visible} /* lencana angka boleh menonjol */
+.gramofon-player .gp-top-actions{align-items:center}
+/* Pembungkus dibuat persis 34x34 supaya keduanya sejajar tengah. Dulu
+   pembungkus avatar adalah blok biasa dengan tombol inline, sehingga tinggi
+   baris teks menambah celah di bawah dan avatar tampak lebih tinggi dari lonceng. */
+.gramofon-player .notif-wrap,.gramofon-player .profile-menu-wrap{display:flex;align-items:center;justify-content:center;width:34px;height:34px;flex:none}
+.gramofon-player .topbar-avatar img{width:100%;height:100%;object-fit:cover;display:block;border-radius:50%}
 .gramofon-player .iconbtn-bell:hover{background:rgba(255,255,255,.13);color:var(--gp-text)}
 .gramofon-player .topbar-avatar{background:var(--gp-grad)}
 .gramofon-player .topbar-avatar span{color:var(--gp-accent-ink);font-weight:700}
@@ -135,12 +164,14 @@
 .gramofon-player .profile-menu__item--danger svg{color:#ff9aa9}
 .gramofon-player .profile-menu__item--danger:hover{background:rgba(232,99,122,.12)}
 
-/* Notifikasi: dipusatkan di layar sebagai panel (bukan dropdown pojok),
-   lengkap dengan backdrop peredup (pakai :has(), fallback aman kalau
-   browser belum mendukung -- panel tetap tampil, hanya tanpa backdrop). */
-.gramofon-player .notif-wrap:has(.notif-panel)::before{
-  content:"";position:fixed;inset:0;background:rgba(4,3,8,.6);backdrop-filter:blur(3px);z-index:230;
-}
+/* Notifikasi: dipusatkan di layar sebagai panel (bukan dropdown pojok).
+   TIDAK memakai backdrop pseudo-element fixed -- itu membuat SEMUA klik
+   di layar terdeteksi "di dalam" .notif-wrap (pseudo-element dianggap
+   bagian dari elemen aslinya), sehingga klik-di-luar-untuk-menutup di
+   NotificationBell.js jadi tidak pernah berhasil mengenali "di luar". */
+/* Latar pudar + blur di belakang daftar notifikasi -- sama dengan latar saat
+   isi notifikasi dibuka (.notif-detail-backdrop). */
+.gramofon-player .notif-list-backdrop{position:fixed;inset:0;background:rgba(6,8,12,.65);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);z-index:230}
 .gramofon-player .notif-panel{
   position:fixed;top:50%;left:50%;right:auto;transform:translate(-50%,-50%);
   width:min(420px,92vw);max-height:min(72vh,560px);display:flex;flex-direction:column;
@@ -163,9 +194,9 @@
    AREA UTAMA
    ========================================================== */
 .gramofon-player .gp-view{min-height:0;overflow:hidden;position:relative}
-.gramofon-player .gp-stage-layout{height:100%;display:grid;grid-template-columns:minmax(0,1fr) clamp(300px,27vw,380px)}
+.gramofon-player .gp-stage-layout{height:100%;display:grid;grid-template-columns:minmax(0,1fr) clamp(300px,27vw,380px);align-items:stretch}
 .gramofon-player .gp-stage{padding:22px clamp(16px,2.4vw,32px);overflow:auto;min-height:0;display:flex;flex-direction:column}
-.gramofon-player .gp-panel{border-left:1px solid var(--gp-line-soft);background:var(--gp-bg-2);display:flex;flex-direction:column;min-height:0;min-width:0}
+.gramofon-player .gp-panel{border-left:1px solid var(--gp-line-soft);background:var(--gp-bg-2);display:flex;flex-direction:column;min-height:0;min-width:0;height:100%}
 .gramofon-player .gp-scroll-page{height:100%;overflow:auto;padding:24px clamp(16px,3.2vw,40px) 44px;scrollbar-color:var(--gp-line) transparent}
 .gramofon-player .gp-stage::-webkit-scrollbar,.gramofon-player .gp-scroll-page::-webkit-scrollbar,.gramofon-player .gp-plist::-webkit-scrollbar,.gramofon-player .gp-pl-rows::-webkit-scrollbar,.gramofon-player .gp-table-wrap::-webkit-scrollbar{width:9px;height:9px}
 .gramofon-player .gp-stage::-webkit-scrollbar-track,.gramofon-player .gp-scroll-page::-webkit-scrollbar-track,.gramofon-player .gp-plist::-webkit-scrollbar-track,.gramofon-player .gp-pl-rows::-webkit-scrollbar-track,.gramofon-player .gp-table-wrap::-webkit-scrollbar-track{background:transparent}
@@ -248,9 +279,14 @@ html[data-reduce-motion="true"] .gramofon-player .gp-disc{animation:none !import
 .gramofon-player .gp-page-head{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;margin-bottom:18px}
 .gramofon-player .gp-page-head h2{font-size:clamp(20px,2.2vw,25px);font-weight:700;letter-spacing:-.01em}
 .gramofon-player .gp-page-head p{color:var(--gp-muted);margin-top:4px;max-width:60ch}
-.gramofon-player .gp-manage-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);grid-auto-rows:minmax(230px,auto);gap:16px;margin-bottom:18px}
-.gramofon-player .gp-card--fill{contain:size;display:flex;flex-direction:column;min-height:0}
-.gramofon-player .gp-card--fill .gp-pl-rows{flex:1;min-height:0;max-height:none}
+.gramofon-player .gp-manage-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);grid-auto-rows:minmax(290px,auto);gap:16px;margin-bottom:18px}
+.gramofon-player .gp-card--fill{display:flex;flex-direction:column;min-height:0}
+/* Kartu "terikat": tingginya MENGIKUTI kartu di sebelahnya (Penyimpanan /
+   Kelola Explore) -- isinya tidak ikut menentukan tinggi baris (contain:size),
+   jadi daftar yang panjang di-scroll DI DALAM kartu, bukan memanjangkan halaman. */
+.gramofon-player .gp-card--bound{contain:size;overflow:hidden}
+.gramofon-player .gp-card--bound .gp-pl-rows,.gramofon-player .gp-card--bound .gp-catlist{flex:1 1 0;min-height:0;max-height:none;overflow-y:auto;overflow-x:hidden;padding-right:4px;margin-bottom:0}
+.gramofon-player .gp-card--bound .gp-new-playlist{flex:none}
 .gramofon-player .gp-card{background:var(--gp-panel);border:1px solid var(--gp-line-soft);border-radius:var(--gp-radius-l);padding:18px;min-width:0}
 .gramofon-player .gp-card-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
 .gramofon-player .gp-card-title h3{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px}
@@ -267,15 +303,22 @@ html[data-reduce-motion="true"] .gramofon-player .gp-disc{animation:none !import
 .gramofon-player .gp-dot.v{background:var(--gp-accent-2)}
 .gramofon-player .gp-dot.a{background:var(--gp-accent)}
 .gramofon-player .gp-dot.f{background:rgba(255,255,255,.12)}
-.gramofon-player .gp-pl-rows{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;max-height:230px;overflow:auto}
-.gramofon-player .gp-pl-row{display:flex;align-items:center;gap:10px;padding:8px 4px 8px 8px;border-radius:10px;cursor:pointer}
-.gramofon-player .gp-pl-row:hover{background:rgba(255,255,255,.04)}
+.gramofon-player .gp-pl-rows{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;max-height:230px;overflow:auto}
+/* Tampilan baris = sama dengan baris di Kelola Kategori (.gp-catrow):
+   kotak berbingkai, pegangan geser di kiri, efek saat diseret/di-drop. */
+.gramofon-player .gp-pl-row{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 4px;border-radius:10px;cursor:pointer;background:rgba(255,255,255,.03);border:1px solid var(--gp-line-soft)}
+.gramofon-player .gp-pl-row:hover{background:rgba(255,255,255,.06)}
+.gramofon-player .gp-pl-row.is-dragging{opacity:.4}
+.gramofon-player .gp-pl-row.is-dragover{box-shadow:inset 0 2px 0 var(--gp-accent)}
+.gramofon-player .gp-pl-row .gp-drag-handle,.gramofon-player .gp-drag-spacer{width:20px;flex:none}
 .gramofon-player .gp-pl-row .gp-info{flex:1;min-width:0}
 .gramofon-player .gp-pl-row b{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
 .gramofon-player .gp-pl-row small{color:var(--gp-muted);font-size:12px}
-.gramofon-player .gp-pl-row.is-active{background:rgba(155,124,246,.16);box-shadow:inset 0 0 0 1px rgba(155,124,246,.4)}
+.gramofon-player .gp-pl-row.is-active{background:rgba(155,124,246,.16);border-color:rgba(155,124,246,.4)}
+.gramofon-player .gp-pl-row.is-active.is-dragover{box-shadow:inset 0 2px 0 var(--gp-accent)}
 .gramofon-player .gp-new-playlist{display:flex;gap:8px;margin-top:10px}
-.gramofon-player .gp-new-playlist input{flex:1;background:var(--gp-bg-2);border:1px solid var(--gp-line);border-radius:10px;padding:9px 12px;color:var(--gp-text)}
+.gramofon-player .gp-new-playlist{display:flex;gap:8px;margin-top:10px;min-width:0}
+.gramofon-player .gp-new-playlist input{flex:1;min-width:0;background:var(--gp-bg-2);border:1px solid var(--gp-line);border-radius:10px;padding:9px 12px;color:var(--gp-text)}
 .gramofon-player .gp-new-playlist input:focus{outline:2px solid var(--gp-accent);outline-offset:1px}
 
 .gramofon-player .gp-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
@@ -303,7 +346,10 @@ html[data-reduce-motion="true"] .gramofon-player .gp-disc{animation:none !import
 .gramofon-player .gp-acts{white-space:nowrap;text-align:right}
 .gramofon-player .gp-acts-inner{display:inline-flex;gap:4px;justify-content:flex-end;align-items:center}
 .gramofon-player .gp-table-empty{padding:34px;text-align:center;color:var(--gp-muted)}
-.gramofon-player .gp-bulkbar{display:flex;align-items:center;gap:10px;margin-bottom:10px;color:var(--gp-accent);font-size:13px;font-weight:600}
+.gramofon-player .gp-bulkbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin-bottom:10px;color:var(--gp-accent);font-size:13px;font-weight:600}
+.gramofon-player .gp-selectall{display:inline-flex;align-items:center;gap:8px;cursor:pointer;color:var(--gp-text);font-weight:600}
+.gramofon-player .gp-selectall input{accent-color:var(--gp-accent);width:15px;height:15px;margin:0}
+.gramofon-player .gp-bulkbar .gp-muted{font-weight:500}
 .gramofon-player .gp-drag-col{width:26px}
 
 /* ---------- Explore ---------- */
@@ -414,8 +460,11 @@ html[data-reduce-motion="true"] .gramofon-player .gp-disc{animation:none !import
    ========================================================== */
 @media (max-width:1100px){
   .gramofon-player .gp-manage-grid{grid-template-columns:1fr;grid-auto-rows:auto}
-  .gramofon-player .gp-card--fill{contain:none}
-  .gramofon-player .gp-card--fill .gp-pl-rows{max-height:260px}
+  /* Satu kolom: tidak ada kartu pendamping untuk diikuti, jadi daftar
+     dibatasi tinggi tetap dan di-scroll di dalamnya. */
+  .gramofon-player .gp-card--bound{contain:none;overflow:visible}
+  .gramofon-player .gp-card--bound .gp-pl-rows{flex:none;max-height:260px}
+  .gramofon-player .gp-card--bound .gp-catlist{flex:none;max-height:240px}
 }
 @media (max-width:820px){
   .gramofon-player{--gp-topbar-h:54px;--gp-bottombar-h:64px}
@@ -423,19 +472,22 @@ html[data-reduce-motion="true"] .gramofon-player .gp-disc{animation:none !import
   .gramofon-player .gp-brand{font-size:15px}
   .gramofon-player .gp-menu-toggle{display:inline-grid}
   .gramofon-player .gp-menu{display:none}
-  .gramofon-player .gp-stage-layout{display:block;overflow:auto}
-  .gramofon-player .gp-stage-layout .gp-stage{overflow:visible;padding:0}
+  /* Stage (video) TIDAK ikut scroll -- hanya panel/daftar media di
+     bawahnya yang scroll, supaya video tetap di tempatnya (sticky)
+     walau daftarnya panjang. */
+  .gramofon-player .gp-stage-layout{display:flex;flex-direction:column;overflow:hidden}
+  .gramofon-player .gp-stage-layout .gp-stage{overflow:visible;padding:0;flex:none}
   .gramofon-player .gp-screen{border-radius:0;aspect-ratio:16/9;flex:none;min-height:0;height:auto}
-  .gramofon-player .gp-stage-layout .gp-panel{height:min(460px,60dvh);border-left:0;border-top:1px solid var(--gp-line-soft)}
-  .gramofon-player .gp-audio-stage{min-height:340px;height:auto;padding:20px 0}
+  .gramofon-player .gp-stage-layout .gp-panel{flex:1;height:auto;min-height:0;border-left:0;border-top:1px solid var(--gp-line-soft)}
+  .gramofon-player .gp-audio-stage{flex:none;height:auto;min-height:300px;padding:20px 0}
 
   /* Overlay kontrol aktif di layar kecil */
   .gramofon-player .gp-video-overlay{display:flex}
 
-  /* Bottombar: timer paling kiri, lalu prev / back / play / forward / next, rata kiri dan rapi */
+  /* Bottombar: prev/back/play/forward/next mentok kiri, Timer mentok kanan */
   .gramofon-player .gp-bottombar{display:flex;align-items:center;justify-content:flex-start;gap:4px;padding:0 10px}
   .gramofon-player .gp-np{display:none}
-  .gramofon-player .gp-extras{order:-1;justify-content:flex-start;gap:0;margin-right:6px}
+  .gramofon-player .gp-extras{justify-content:flex-end;gap:0;margin-left:auto}
   .gramofon-player .gp-extras .gp-vol-group{display:none}
   .gramofon-player .gp-transport{display:block;min-width:0}
   .gramofon-player .gp-transport .gp-seek{display:none}
@@ -443,25 +495,63 @@ html[data-reduce-motion="true"] .gramofon-player .gp-disc{animation:none !import
   .gramofon-player .gp-controls .gp-hide-mobile{display:none}
   .gramofon-player .gp-btn-play{margin:0 2px}
   .gramofon-player .gp-ibtn{width:36px;height:36px}
+  /* Tombol Timer: aturan .gp-ibtn di atas memaksa lebar 36px sehingga teks
+     sisa waktu meluber keluar layar. Di sini lebarnya mengikuti isi dan tetap
+     menempel di ujung kanan bawah (memanjang ke kiri). */
+  .gramofon-player .gp-ibtn.gp-sleep-btn{width:auto;min-width:36px;padding:0 10px;gap:6px;white-space:nowrap}
+  .gramofon-player .gp-extras{flex:none}
+  .gramofon-player .gp-transport{flex:1 1 auto;min-width:0}
   .gramofon-player .gp-manage-grid{grid-template-columns:1fr}
   .gramofon-player .gp-mini-player{width:min(240px,calc(100% - 24px))}
+  .gramofon-player .gp-ov-vert{width:26px;height:86px}
+  .gramofon-player .gp-ov-vert input[type=range]{width:74px}
+  .gramofon-player .gp-ov-pop{padding:8px}
 }
 
 
 /* ---------- Explore (revisi) ---------- */
-.gramofon-player .gp-admin-limit{display:flex;flex-direction:column;gap:10px;width:fit-content;max-width:100%}
-.gramofon-player .gp-admin-limit__row{display:flex;align-items:center;gap:8px}
-.gramofon-player .gp-admin-limit .gp-btn{justify-content:center;width:100%}
-.gramofon-player .gp-admin-limit .gp-select-plain{width:100%}
+/* Kelola Explore: dua baris, (field) di kolom kiri selalu sama lebar,
+   tombol di kolom kanan selalu sama lebar (menyamai kolom-nya masing2). */
+.gramofon-player .gp-admin-rows{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;margin-bottom:4px}
+.gramofon-player .gp-admin-row{display:contents}
+.gramofon-player .gp-admin-row .gp-field{width:100%}
+.gramofon-player .gp-admin-row .gp-select-plain{width:100%}
+.gramofon-player .gp-admin-row .gp-btn{justify-content:center;white-space:nowrap}
+.gramofon-player .gp-admin-row .gp-field input[type=number]{width:100%;border:0;background:none;border-radius:0;padding:9px 0;text-align:left}
+/* Desktop: field MB & pilihan kategori hanya sedikit lebih lebar dari tombol
+   di sampingnya (bukan melar mengisi kartu). Tombol tetap sejajar satu kolom.
+   Tampilan Android/iPhone (<=820px) tidak berubah. */
+@media (min-width:821px){
+  .gramofon-player .gp-admin-rows{grid-template-columns:200px minmax(165px,auto);justify-content:start;column-gap:10px}
+}
+.gramofon-player .gp-new-category{min-width:0}
+.gramofon-player .gp-new-category input{flex:0 1 150px}
 .gramofon-player .gp-catlist{list-style:none;margin:0 0 10px;padding:0;display:flex;flex-direction:column;gap:4px;max-height:220px;overflow:auto}
 .gramofon-player .gp-catrow{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 4px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid var(--gp-line-soft)}
 .gramofon-player .gp-catrow.is-dragging{opacity:.4}
 .gramofon-player .gp-catrow.is-dragover{box-shadow:inset 0 2px 0 var(--gp-accent)}
 .gramofon-player .gp-catrow .gp-catname{flex:1;min-width:0;font-weight:600;font-size:13px}
 .gramofon-player .gp-catrow input{flex:1;min-width:0;background:var(--gp-bg-2);border:1px solid var(--gp-line);border-radius:8px;padding:6px 9px;color:var(--gp-text)}
-.gramofon-player .gp-xadmin{position:absolute;right:6px;top:6px;display:flex;gap:4px}
+.gramofon-player .gp-xadmin{position:absolute;right:6px;top:6px;display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:4px;z-index:3;max-width:calc(100% - 44px)}
+/* Tombol visibilitas (Visible / Hidden) di kiri deretan aksi admin */
+.gramofon-player .gp-xadmin .gp-vis-btn{width:auto;padding:0 9px 0 8px;gap:5px;display:inline-flex;align-items:center;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.01em}
+.gramofon-player .gp-xadmin .gp-vis-btn.is-visible{color:#8ff2e3;box-shadow:inset 0 0 0 1px rgba(51,217,196,.45)}
+.gramofon-player .gp-xadmin .gp-vis-btn.is-hidden{color:#ffb3bf;box-shadow:inset 0 0 0 1px rgba(232,99,122,.5)}
+/* Tooltip tombol di dalam kartu: di bawah & rata kanan (thumb memotong luapan) */
+.gramofon-player .gp-xadmin [data-tip]::after{bottom:auto;top:calc(100% + 8px);left:auto;right:0;transform:translateY(-4px)}
+.gramofon-player .gp-xadmin [data-tip]:hover::after,.gramofon-player .gp-xadmin [data-tip]:focus-visible::after{transform:translateY(0)}
+.gramofon-player .gp-xadmin [data-tip]::before{display:none}
+.gramofon-player .gp-xcard.is-hidden .gp-xthumb::after{content:"";position:absolute;inset:0;background:rgba(6,8,12,.6);pointer-events:none;z-index:1}
+.gramofon-player .gp-xcard.is-hidden .gp-xbody{opacity:.6}
 .gramofon-player .gp-xadmin button{width:26px;height:26px;border-radius:50%;background:rgba(4,3,8,.72);color:#fff;display:grid;place-items:center}
 .gramofon-player .gp-xadmin button:hover{background:rgba(4,3,8,.92)}
 .gramofon-player .gp-osd{position:fixed;left:50%;top:calc(var(--gp-topbar-h) + 18px);transform:translateX(-50%);z-index:260;background:rgba(11,15,23,.92);border:1px solid var(--gp-line);border-radius:999px;padding:7px 16px;font-size:12.5px;font-weight:600;box-shadow:0 12px 30px -10px rgba(0,0,0,.8);pointer-events:none}
 .gramofon-player .gp-mini-hint{padding:18px 16px;color:var(--gp-muted);line-height:1.6}
 
+/* ---------- Popup kategori / pemilih ---------- */
+.gramofon-player .user-picker-list--tall{max-height:min(340px,46vh)}
+.gramofon-player .user-picker-row__name{flex:1;min-width:0}
+.gramofon-player .gp-mini-tag{flex:none;font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:rgba(155,124,246,.16);color:#c7bcff;white-space:nowrap;max-width:40%;overflow:hidden;text-overflow:ellipsis}
+.gramofon-player .gp-mini-tag.is-hidden{background:rgba(232,99,122,.16);color:#ffb3bf}
+.gramofon-player .addmenu-item.is-picked{background:rgba(155,124,246,.16);color:var(--gp-text)}
+.gramofon-player .addmenu-item:disabled{cursor:default}

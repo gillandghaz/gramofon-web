@@ -1,32 +1,40 @@
 import { NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase-admin";
-import { signParams } from "@/lib/cloudinary-admin";
+import { adminDb } from "@/lib/firebase-admin";
+import { requireAdmin, readJson, errorResponse, HttpError } from "@/lib/server-auth";
+import { signedUploadPayload, EXPLORE_FOLDER, MEDIA_ALLOWED_FORMATS } from "@/lib/cloudinary-admin";
 
+const DEFAULT_EXPLORE_LIMIT_MB = 5000;
+
+// Izin upload VIDEO/MUSIK ke Explore. HANYA admin. (Thumbnail punya
+// endpoint sendiri: /api/explore/thumbnail/sign-upload.)
 export async function POST(request) {
   try {
-    const authHeader = request.headers.get("authorization") || "";
-    const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-    if (!idToken) return NextResponse.json({ error: "Tidak ada token." }, { status: 401 });
+    await requireAdmin(request);
 
-    const decoded = await adminAuth().verifyIdToken(idToken);
-    const callerSnap = await adminDb().collection("users").doc(decoded.uid).get();
-    if (!callerSnap.exists || callerSnap.data().role !== "admin") {
-      return NextResponse.json({ error: "Bukan admin." }, { status: 403 });
+    const body = await readJson(request);
+    const fileSizeBytes = body.fileSizeBytes;
+    if (typeof fileSizeBytes !== "number" || !Number.isFinite(fileSizeBytes) || fileSizeBytes <= 0) {
+      throw new HttpError(400, "Ukuran file tidak valid.");
     }
 
-    const { mediaId } = await request.json().catch(() => ({}));
-    if (!mediaId) return NextResponse.json({ error: "mediaId wajib diisi." }, { status: 400 });
+    // Pre-check kuota total Explore (cepat, berdasar ukuran yang DIKLAIM
+    // klien). Penegakan sungguhan ada di /api/explore/confirm-upload.
+    const [settingsSnap, existingSnap] = await Promise.all([
+      adminDb().collection("settings").doc("app").get(),
+      adminDb().collection("exploreMedia").get(),
+    ]);
+    const limitMB = settingsSnap.exists ? settingsSnap.data().exploreLimitMB ?? DEFAULT_EXPLORE_LIMIT_MB : DEFAULT_EXPLORE_LIMIT_MB;
+    let usedBytes = 0;
+    existingSnap.forEach((d) => (usedBytes += d.data().bytes || 0));
+    if (usedBytes + fileSizeBytes > limitMB * 1024 * 1024) {
+      const remainingMB = Math.max(0, limitMB - usedBytes / (1024 * 1024)).toFixed(1);
+      throw new HttpError(400, `Kuota Explore tidak cukup. Sisa ruang: ${remainingMB}MB dari ${limitMB}MB.`);
+    }
 
-    const timestamp = Math.round(Date.now() / 1000);
-    // Folder per-item supaya gampang ditelusuri/dihapus; thumbnail HANYA
-    // gambar kecil jadi tidak dihitung ke kuota Explore (video/musik).
-    const folder = `gramofon-explore-thumbs/${mediaId}`;
-    const { signature, apiKey, cloudName } = signParams({ timestamp, folder });
-
-    return NextResponse.json({ signature, timestamp, folder, apiKey, cloudName });
+    return NextResponse.json(
+      signedUploadPayload({ folder: EXPLORE_FOLDER, allowedFormats: MEDIA_ALLOWED_FORMATS })
+    );
   } catch (err) {
-    console.error("explore thumbnail sign-upload error:", err);
-    const message = err?.message?.includes("belum dikonfigurasi") ? err.message : "Terjadi kesalahan di server.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(err, "explore sign-upload");
   }
 }

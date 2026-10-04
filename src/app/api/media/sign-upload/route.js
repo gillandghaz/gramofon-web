@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
-import { signParams } from "@/lib/cloudinary-admin";
+import { signedUploadPayload, PERSONAL_FOLDER, MEDIA_ALLOWED_FORMATS } from "@/lib/cloudinary-admin";
 
 const DEFAULT_LIMIT_MB = 200;
 
@@ -10,9 +10,11 @@ async function getEffectiveLimitMB(uid) {
     adminDb().collection("settings").doc("app").get(),
   ]);
   const userLimit = userSnap.exists ? userSnap.data().storageLimitMB : undefined;
-  if (userLimit !== undefined) return userLimit;
+  if (typeof userLimit === "number" && Number.isFinite(userLimit)) return userLimit;
   const defaultLimit = settingsSnap.exists ? settingsSnap.data().defaultStorageLimitMB : undefined;
-  return defaultLimit ?? DEFAULT_LIMIT_MB;
+  return typeof defaultLimit === "number" && Number.isFinite(defaultLimit)
+    ? defaultLimit
+    : DEFAULT_LIMIT_MB;
 }
 
 async function getCurrentUsageBytes(uid) {
@@ -31,8 +33,9 @@ export async function POST(request) {
     const decoded = await adminAuth().verifyIdToken(idToken);
     const uid = decoded.uid;
 
-    const { fileSizeBytes } = await request.json();
-    if (!fileSizeBytes || fileSizeBytes <= 0) {
+    const body = await request.json().catch(() => ({}));
+    const fileSizeBytes = body.fileSizeBytes;
+    if (typeof fileSizeBytes !== "number" || !Number.isFinite(fileSizeBytes) || fileSizeBytes <= 0) {
       return NextResponse.json({ error: "Ukuran file tidak valid." }, { status: 400 });
     }
 
@@ -52,11 +55,12 @@ export async function POST(request) {
       );
     }
 
-    const timestamp = Math.round(Date.now() / 1000);
-    const folder = `gramofon/${uid}`;
-    const { signature, apiKey, cloudName } = signParams({ timestamp, folder });
-
-    return NextResponse.json({ signature, timestamp, folder, apiKey, cloudName });
+    // allowed_formats ikut ditandatangani: Cloudinary menolak file selain
+    // video/musik, sehingga tidak ada file "raw" liar yang menumpuk di
+    // luar hitungan kuota.
+    return NextResponse.json(
+      signedUploadPayload({ folder: PERSONAL_FOLDER(uid), allowedFormats: MEDIA_ALLOWED_FORMATS })
+    );
   } catch (err) {
     console.error("sign-upload error:", err);
     const message = err?.message?.includes("belum dikonfigurasi")
