@@ -653,6 +653,88 @@ function AppInner() {
       console.warn("Web Audio tidak tersedia:", e);
     }
   }
+  // ---- Pemutaran di latar belakang + kontrol layar kunci (HP) ----
+  // - audioSession "playback": suara tetap jalan saat pindah aplikasi / layar
+  //   dikunci dan tidak ikut dibisukan tombol silent iPhone (Safari 16.4+).
+  // - Media Session: judul + tombol play/pause/next/prev/seek di notifikasi
+  //   Android dan layar kunci iPhone. Tanpa ini sistem tidak menganggap
+  //   halaman sebagai pemutar media.
+  // - Saat halaman kembali terlihat, Web Audio yang ditahan sistem (telepon,
+  //   Siri, aplikasi lain) dihidupkan lagi.
+  const mediaSessionRef = useRef({});
+  mediaSessionRef.current = { next, prev, backSkip, fwdSkip, togglePlay };
+  useEffect(() => {
+    try {
+      if (navigator.audioSession) navigator.audioSession.type = "playback";
+    } catch {}
+    const ms = typeof navigator !== "undefined" ? navigator.mediaSession : null;
+    const set = (action, fn) => {
+      try {
+        ms?.setActionHandler(action, fn);
+      } catch {}
+    };
+    if (ms) {
+      set("play", () => {
+        const el = playerRef.current;
+        if (el && el.paused) mediaSessionRef.current.togglePlay();
+      });
+      set("pause", () => {
+        const el = playerRef.current;
+        if (el && !el.paused) el.pause();
+      });
+      set("previoustrack", () => mediaSessionRef.current.prev());
+      set("nexttrack", () => mediaSessionRef.current.next());
+      set("seekbackward", () => mediaSessionRef.current.backSkip());
+      set("seekforward", () => mediaSessionRef.current.fwdSkip());
+      set("seekto", (d) => {
+        const el = playerRef.current;
+        if (el && typeof d?.seekTime === "number") el.currentTime = d.seekTime;
+      });
+    }
+    function onVisible() {
+      if (document.visibilityState !== "visible") return;
+      const el = playerRef.current;
+      const ctx = audioCtxRef.current;
+      if (el && !el.paused && ctx && ctx.state !== "running") ctx.resume().catch(() => {});
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      ["play", "pause", "previoustrack", "nexttrack", "seekbackward", "seekforward", "seekto"].forEach((a) => set(a, null));
+    };
+  }, []);
+  useEffect(() => {
+    const ms = typeof navigator !== "undefined" ? navigator.mediaSession : null;
+    if (!ms || typeof MediaMetadata === "undefined") return;
+    try {
+      if (!nowPlaying) {
+        ms.metadata = null;
+        return;
+      }
+      const art = mediaThumb(nowPlaying);
+      ms.metadata = new MediaMetadata({
+        title: nowPlaying.title || "Gramofon",
+        artist: queueLabel || "Gramofon",
+        album: "Gramofon",
+        artwork: art ? [{ src: art, sizes: "480x270", type: "image/jpeg" }] : [],
+      });
+    } catch {}
+  }, [nowPlaying, queueLabel]);
+  useEffect(() => {
+    try {
+      if (navigator.mediaSession) navigator.mediaSession.playbackState = nowPlaying ? (playing ? "playing" : "paused") : "none";
+    } catch {}
+  }, [playing, nowPlaying]);
+  useEffect(() => {
+    const ms = typeof navigator !== "undefined" ? navigator.mediaSession : null;
+    if (!ms || !ms.setPositionState || !nowPlaying || !duration || !Number.isFinite(duration)) return;
+    try {
+      ms.setPositionState({ duration, playbackRate: playbackRate || 1, position: Math.min(duration, Math.max(0, currentTime || 0)) });
+    } catch {}
+    // Cukup diperbarui saat durasi/status berubah, bukan tiap detik.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [duration, playing, nowPlaying, playbackRate]);
+
   function applyVolume(percent) {
     const clamped = Math.min(120, Math.max(0, percent));
     setVolumePercent(clamped);
