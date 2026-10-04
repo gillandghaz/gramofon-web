@@ -7,9 +7,10 @@ import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 
 export class HttpError extends Error {
-  constructor(status, message) {
+  constructor(status, message, code) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -27,7 +28,12 @@ function bearerToken(request) {
 // kosong lewat API publiknya (tidak bisa dicegah dari sisi aplikasi), jadi
 // akun tanpa profil -- yang tidak lolos saat pendaftaran ditutup -- ditolak
 // di SEMUA endpoint server, termasuk izin upload ke Cloudinary.
-export async function requireUser(request, { checkRevoked = false, requireProfile = true } = {}) {
+//
+// checkRevoked=true (default): server menanyakan ke Firebase apakah token masih
+// berlaku. Akun yang DINONAKTIFKAN (mis. lewat Firebase Console) atau yang
+// token-nya dicabut langsung ditolak -- bukan menunggu token kedaluwarsa
+// (sampai 1 jam). Klien melihat code "session-revoked" lalu logout.
+export async function requireUser(request, { checkRevoked = true, requireProfile = true } = {}) {
   const token = bearerToken(request);
   if (!token) throw new HttpError(401, "Tidak ada token.");
   let decoded;
@@ -35,7 +41,10 @@ export async function requireUser(request, { checkRevoked = false, requireProfil
     decoded = await adminAuth().verifyIdToken(token, checkRevoked);
   } catch (err) {
     if (err?.message?.includes("belum dikonfigurasi")) throw err;
-    throw new HttpError(401, "Sesi tidak valid. Silakan login ulang.");
+    if (err?.code === "auth/user-disabled" || err?.code === "auth/id-token-revoked") {
+      throw new HttpError(401, "Akun dinonaktifkan atau sesi dicabut.", "session-revoked");
+    }
+    throw new HttpError(401, "Sesi tidak valid. Silakan login ulang.", "invalid-session");
   }
   if (requireProfile) {
     const snap = await adminDb().collection("users").doc(decoded.uid).get();
@@ -85,7 +94,7 @@ export async function readJson(request, maxBytes = 64 * 1024) {
 
 export function errorResponse(err, label = "api") {
   if (err instanceof HttpError) {
-    return NextResponse.json({ error: err.message }, { status: err.status });
+    return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
   }
   console.error(`${label} error:`, err);
   // Pesan konfigurasi (env var belum diisi) aman & berguna ditampilkan.

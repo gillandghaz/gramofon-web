@@ -71,6 +71,44 @@ export function AuthProvider({ children }) {
     return () => unsubProfile();
   }, [user]);
 
+  // Pemeriksaan sesi berkala: kalau akun dinonaktifkan di Firebase Console
+  // (atau token dicabut), server menjawab 401 dan kita langsung logout.
+  // Tanpa ini, browser baru sadar saat tokennya diperbarui (bisa ~1 jam).
+  useEffect(() => {
+    if (!user) return;
+    let stopped = false;
+    const DEAD = ["auth/user-disabled", "auth/user-token-expired", "auth/user-not-found", "auth/id-token-revoked"];
+
+    async function check() {
+      if (stopped) return;
+      try {
+        const idToken = await user.getIdToken();
+        const res = await fetch("/api/auth/session", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
+        if (res.status === 401 && !stopped) signOut(auth).catch(() => {});
+      } catch (err) {
+        if (DEAD.includes(err?.code) && !stopped) signOut(auth).catch(() => {});
+        // Gangguan jaringan biasa: abaikan, coba lagi pada putaran berikutnya.
+      }
+    }
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") check();
+    };
+    const timer = setInterval(check, 60 * 1000);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", check);
+    check();
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", check);
+    };
+  }, [user]);
+
   const isAdmin = profile?.role === "admin";
 
   return (

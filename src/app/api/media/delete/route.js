@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { adminDb } from "@/lib/firebase-admin";
+import { requireUser, errorResponse } from "@/lib/server-auth";
 import { destroyAsset } from "@/lib/cloudinary-admin";
 
 export async function POST(request) {
@@ -8,7 +9,7 @@ export async function POST(request) {
     const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
     if (!idToken) return NextResponse.json({ error: "Tidak ada token." }, { status: 401 });
 
-    const decoded = await adminAuth().verifyIdToken(idToken);
+    const decoded = await requireUser(request, { requireProfile: false });
     const callerUid = decoded.uid;
 
     const { mediaId } = await request.json();
@@ -52,10 +53,6 @@ export async function POST(request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error("delete-media error:", err);
-    const message = err?.message?.includes("belum dikonfigurasi")
-      ? err.message
-      : "Terjadi kesalahan di server.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(err, "media delete");
   }
 }
