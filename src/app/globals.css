@@ -41,6 +41,12 @@ body {
   font-family: var(--font-ui);
   /* min 320px-safe; teruji nyaman untuk layar 6"-6.7" seperti Realme 5 Pro / iPhone 12 */
   font-size: 15px;
+  /* iOS Safari/Android Chrome otomatis "menyesuaikan" ukuran teks pada blok
+     tertentu (mis. baris daftar yang berlebih lebar) sehingga sebagian
+     keterangan tampak lebih besar dari yang lain. 100% = matikan penyesuaian
+     itu, ukuran font mengikuti CSS persis. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   -webkit-font-smoothing: antialiased;
   /* Scrollbar Firefox: tipis & tanpa tombol panah (Firefox tidak
      mendukung ::-webkit-scrollbar-button sama sekali -- ini yang
