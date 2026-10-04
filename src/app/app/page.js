@@ -331,7 +331,7 @@ function AppInner() {
       await deleteMedia(deleteTarget.id);
       if (nowPlaying?.id === deleteTarget.id) {
         setNowPlaying(null);
-        playerRef.current?.pause();
+        pausePlayer();
       }
       setDeleteTarget(null);
       await refresh();
@@ -350,7 +350,7 @@ function AppInner() {
         await deleteMedia(id);
         if (nowPlaying?.id === id) {
           setNowPlaying(null);
-          playerRef.current?.pause();
+          pausePlayer();
         }
       }
       setBulkDeleteIds(null);
@@ -448,13 +448,34 @@ function AppInner() {
     if (repeatMode === "queue" || queueIndex < queue.length - 1) next();
   }
 
+  // Semua jeda yang DISENGAJA (tombol, layar kunci, timer tidur, dll) lewat sini.
+  // Jeda yang bukan dari kita -- mis. browser HP menghentikan media saat
+  // pindah aplikasi -- dikenali di onPause dan langsung dilanjutkan.
+  const userPausedRef = useRef(false);
+  function pausePlayer() {
+    userPausedRef.current = true;
+    playerRef.current?.pause();
+  }
+  function handleMediaPause() {
+    setPlaying(false);
+    const el = playerRef.current;
+    if (!el || userPausedRef.current || el.ended || !nowPlaying) return;
+    if (typeof document !== "undefined" && document.hidden) {
+      // Dihentikan sistem saat halaman di latar belakang -> lanjutkan.
+      audioCtxRef.current?.resume?.().catch(() => {});
+      setTimeout(() => {
+        if (document.hidden && !userPausedRef.current) el.play().catch(() => {});
+      }, 0);
+    }
+  }
+
   function togglePlay() {
     if (!playerRef.current || !nowPlaying) return;
     if (playerRef.current.paused) {
       ensureAudioGraph(); // sinkron, di dalam ketukan pengguna, SEBELUM play()
       playerRef.current.play().catch(() => {});
     } else {
-      playerRef.current.pause();
+      pausePlayer();
     }
   }
   function hasNextTrack() {
@@ -680,7 +701,7 @@ function AppInner() {
       });
       set("pause", () => {
         const el = playerRef.current;
-        if (el && !el.paused) el.pause();
+        if (el && !el.paused) pausePlayer();
       });
       set("previoustrack", () => mediaSessionRef.current.prev());
       set("nexttrack", () => mediaSessionRef.current.next());
@@ -873,7 +894,7 @@ function AppInner() {
     const iv = setInterval(() => {
       const remaining = sleepEndAt - Date.now();
       if (remaining <= 0) {
-        playerRef.current?.pause();
+        pausePlayer();
         setSleepEndAt(null);
         setSleepLabel("");
         clearInterval(iv);
@@ -1179,7 +1200,7 @@ function AppInner() {
       await deleteExploreMedia(target.id);
       if (nowPlaying?.id === target.id) {
         setNowPlaying(null);
-        playerRef.current?.pause();
+        pausePlayer();
       }
     } catch (err) {
       setExploreErr(err.message || "Gagal menghapus media Explore.");
@@ -1410,8 +1431,11 @@ function AppInner() {
           screenRef={videoScreenRef}
           onFrameClick={handleFrameClick}
           onContextMenu={openCtxMenu}
-          onPlay={() => setPlaying(true)}
-          onPause={() => setPlaying(false)}
+          onPlay={() => {
+            userPausedRef.current = false;
+            setPlaying(true);
+          }}
+          onPause={handleMediaPause}
           onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
           onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
           onEnded={handleEnded}
