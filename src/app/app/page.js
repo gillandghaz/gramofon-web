@@ -376,9 +376,8 @@ function AppInner() {
       el.src = item.url;
       el.playbackRate = playbackRate;
       el.loop = repeatMode === "track";
-      el.play()
-        .then(() => ensureAudioGraph())
-        .catch((e) => console.warn("Gagal memutar:", e));
+      ensureAudioGraph(); // sinkron, di dalam ketukan pengguna, SEBELUM play()
+      el.play().catch((e) => console.warn("Gagal memutar:", e));
     }
   }
 
@@ -393,9 +392,8 @@ function AppInner() {
       el.src = item.url;
       el.playbackRate = playbackRate;
       el.loop = repeatMode === "track";
-      el.play()
-        .then(() => ensureAudioGraph())
-        .catch((e) => console.warn("Gagal memutar:", e));
+      ensureAudioGraph(); // sinkron, di dalam ketukan pengguna, SEBELUM play()
+      el.play().catch((e) => console.warn("Gagal memutar:", e));
     }
   }
 
@@ -448,7 +446,8 @@ function AppInner() {
   function togglePlay() {
     if (!playerRef.current || !nowPlaying) return;
     if (playerRef.current.paused) {
-      playerRef.current.play().then(() => ensureAudioGraph()).catch(() => {});
+      ensureAudioGraph(); // sinkron, di dalam ketukan pengguna, SEBELUM play()
+      playerRef.current.play().catch(() => {});
     } else {
       playerRef.current.pause();
     }
@@ -597,16 +596,40 @@ function AppInner() {
     };
   }, [viewMode, nowPlaying, mobileMenuOpen]);
 
-  // ---- Web Audio: hanya dipakai untuk boost volume >100% ----
+  // ---- Web Audio: boost volume >100% + data untuk visualizer ----
+  //
+  // PENTING (penyebab "suara baru terdengar setelah pause" di HP):
+  //  - Setelah createMediaElementSource(), SEMUA suara elemen lewat AudioContext.
+  //    Kalau context dibuat di luar ketukan pengguna (mis. di dalam .then()
+  //    setelah play()), browser HP membiarkannya "suspended" -> hening, dan
+  //    baru hidup saat pengguna mengetuk lagi (pause/play).
+  //  - Membuat source SAAT media sudah berjalan juga membuat iOS memutar
+  //    potongan buffer berulang-ulang ("suara rusak").
+  // Karena itu graph dibuat SINKRON di dalam handler ketukan, SEBELUM
+  // play() dipanggil (lihat playItem/playAtIndex/togglePlay), dan di iPhone/
+  // iPad Web Audio tidak dipakai sama sekali (iOS tidak mendukung pengaturan
+  // volume elemen & sering bermasalah dengan MediaElementSource; visualizer
+  // memakai animasi cadangan di sana).
+  function isIOS() {
+    if (typeof navigator === "undefined") return false;
+    return (
+      /iP(hone|ad|od)/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+    );
+  }
   function ensureAudioGraph() {
+    if (isIOS()) return;
     if (audioCtxRef.current) {
-      if (audioCtxRef.current.state === "suspended") audioCtxRef.current.resume();
+      if (audioCtxRef.current.state !== "running") audioCtxRef.current.resume().catch(() => {});
       return;
     }
     if (!playerRef.current) return;
     try {
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       const ctx = new AudioContextClass();
+      // Jangan pernah mengaitkan elemen ke context yang tidak bisa berjalan
+      // (itu membuat media hening permanen). Di dalam ketukan, resume() aman.
+      ctx.resume().catch(() => {});
       const source = ctx.createMediaElementSource(playerRef.current);
       const gain = ctx.createGain();
       const analyser = ctx.createAnalyser();
@@ -619,7 +642,6 @@ function AppInner() {
       gain.gain.value = volumePercent > 100 ? volumePercent / 100 : 1;
       audioCtxRef.current = ctx;
       gainRef.current = gain;
-      if (ctx.state === "suspended") ctx.resume();
     } catch (e) {
       console.warn("Web Audio tidak tersedia:", e);
     }
