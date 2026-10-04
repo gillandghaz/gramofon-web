@@ -65,7 +65,7 @@ export default function AccountTab() {
         setPhotoErr("Gambar masih terlalu besar setelah diperkecil. Coba foto lain.");
       else if (err.code === "permission-denied")
         setPhotoErr("Ditolak Firestore Security Rules — pastikan rules terbaru sudah dipasang.");
-      else setPhotoErr(`Gagal mengunggah foto (${err.code || err.message || "unknown"}).`);
+      else setPhotoErr(`Gagal mengunggah foto (${String(err.code || err.message || "unknown").replace(/[.\s]+$/, "")}).`);
     } finally {
       setPhotoBusy(false);
       e.target.value = "";

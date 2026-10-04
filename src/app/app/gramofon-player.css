@@ -279,7 +279,7 @@ html[data-reduce-motion="true"] .gramofon-player .gp-disc{animation:none !import
 .gramofon-player .gp-page-head{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;margin-bottom:18px}
 .gramofon-player .gp-page-head h2{font-size:clamp(20px,2.2vw,25px);font-weight:700;letter-spacing:-.01em}
 .gramofon-player .gp-page-head p{color:var(--gp-muted);margin-top:4px;max-width:60ch}
-.gramofon-player .gp-manage-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);grid-auto-rows:minmax(290px,auto);gap:16px;margin-bottom:18px}
+.gramofon-player .gp-manage-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);grid-auto-rows:minmax(220px,auto);gap:16px;margin-bottom:18px}
 .gramofon-player .gp-card--fill{display:flex;flex-direction:column;min-height:0}
 /* Kartu "terikat": tingginya MENGIKUTI kartu di sebelahnya (Penyimpanan /
    Kelola Explore) -- isinya tidak ikut menentukan tinggi baris (contain:size),
@@ -503,9 +503,21 @@ html[data-reduce-motion="true"] .gramofon-player .gp-disc{animation:none !import
   .gramofon-player .gp-transport{flex:1 1 auto;min-width:0}
   .gramofon-player .gp-manage-grid{grid-template-columns:1fr}
   .gramofon-player .gp-mini-player{width:min(240px,calc(100% - 24px))}
-  .gramofon-player .gp-ov-vert{width:26px;height:86px}
-  .gramofon-player .gp-ov-vert input[type=range]{width:74px}
-  .gramofon-player .gp-ov-pop{padding:8px}
+  /* Bar volume di dalam video (Theater): diperkecil agar tidak keluar dari video */
+  .gramofon-player .gp-ov-vert{width:22px;height:58px}
+  .gramofon-player .gp-ov-vert input[type=range]{width:54px}
+  .gramofon-player .gp-ov-pop{padding:6px 4px;max-height:calc(100% - 52px);overflow:hidden}
+  .gramofon-player .gp-ov-vol-num{font-size:9.5px;margin-top:2px}
+  .gramofon-player .gp-ov-pop .gp-ov-btn{width:26px;height:26px;margin-top:2px !important}
+  .gramofon-player .gp-ov-pop .gp-ov-btn svg{width:15px;height:15px}
+
+  /* Audio Only & Mini: SATU halaman yang bisa di-scroll (di antara topbar dan
+     bottombar) -- tampilan atas + daftar media ikut bergulir, tidak kaku seperti
+     Theater. */
+  .gramofon-player .gp-stage-layout--scroll{display:block;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;scrollbar-color:var(--gp-line) transparent}
+  .gramofon-player .gp-stage-layout--scroll .gp-panel{height:auto;min-height:0;overflow:visible}
+  .gramofon-player .gp-stage-layout--scroll .gp-plist{overflow:visible;flex:none;max-height:none}
+  .gramofon-player .gp-stage-layout--scroll .gp-mini-hint{padding:14px 16px}
 }
 
 
@@ -555,3 +567,18 @@ html[data-reduce-motion="true"] .gramofon-player .gp-disc{animation:none !import
 .gramofon-player .gp-mini-tag.is-hidden{background:rgba(232,99,122,.16);color:#ffb3bf}
 .gramofon-player .addmenu-item.is-picked{background:rgba(155,124,246,.16);color:var(--gp-text)}
 .gramofon-player .addmenu-item:disabled{cursor:default}
+
+/* Field MB di Kelola Explore: kotak fokus bawaan input angka (persegi, di
+   dalam kapsul) dimatikan -- kapsul .gp-field sendiri yang berubah warna. */
+.gramofon-player .gp-field input:focus,.gramofon-player .gp-field input[type=number]:focus{outline:none;box-shadow:none}
+
+/* ---------- Popup pemilih (playlist / kategori) ---------- */
+.gramofon-player .gp-pick-sub{margin:0 0 12px;font-size:13px;color:var(--gp-muted);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.gramofon-player .gp-pick-list{max-height:min(320px,46vh);overflow-y:auto;border:1px solid var(--gp-line-soft);border-radius:var(--gp-radius-s);background:var(--gp-bg-2)}
+.gramofon-player .gp-pick-item{display:flex;align-items:center;gap:10px;width:100%;padding:11px 14px;text-align:left;border-bottom:1px solid var(--gp-line-soft);color:var(--gp-text);font-size:13px;font-weight:500;transition:background .15s}
+.gramofon-player .gp-pick-item:last-child{border-bottom:0}
+.gramofon-player .gp-pick-item:hover:not(:disabled){background:rgba(255,255,255,.06)}
+.gramofon-player .gp-pick-item:disabled{cursor:default;opacity:.7}
+.gramofon-player .gp-pick-item.is-picked{background:rgba(155,124,246,.14)}
+.gramofon-player .gp-pick-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gramofon-player .gp-pick-count{flex:none;font-size:11.5px;color:var(--gp-dim)}

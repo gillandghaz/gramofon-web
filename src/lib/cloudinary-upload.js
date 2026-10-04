@@ -44,6 +44,19 @@ export async function postJson(url, idToken, body, fallbackError) {
     body: JSON.stringify(body || {}),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || fallbackError || "Permintaan gagal.");
+  if (!res.ok) {
+    console.error(`[${url}] HTTP ${res.status}`, data);
+    throw new Error(describeError(data, res.status, fallbackError));
+  }
   return data;
+}
+
+// Pesan error selalu menyertakan kode HTTP (dan kode error server kalau ada),
+// supaya penyebab "gagal" bisa dilacak -- bukan sekadar teks umum.
+export function describeError(data, status, fallback) {
+  // Detail teknis (HTTP status / kode) hanya ke console; pesan untuk
+  // pengguna tetap singkat dan tanpa titik di akhir.
+  const base = String(data?.error || fallback || "Permintaan gagal").replace(/[.\s]+$/, "");
+  if (typeof console !== "undefined") console.error("Permintaan gagal:", { status, code: data?.code, error: data?.error });
+  return base;
 }

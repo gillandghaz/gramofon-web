@@ -204,6 +204,9 @@ function AppInner() {
   const [assignCategoryFor, setAssignCategoryFor] = useState(null); // media Explore yang mau dikategorikan
   const [categoryMembersFor, setCategoryMembersFor] = useState(null); // nama kategori yang isinya diedit
   const [categoryModalBusy, setCategoryModalBusy] = useState(false);
+  const [playlistMembersFor, setPlaylistMembersFor] = useState(null); // id playlist yang isinya diedit
+  const [playlistMembersBusy, setPlaylistMembersBusy] = useState(false);
+  const [playlistMembersErr, setPlaylistMembersErr] = useState("");
   const [categoryModalErr, setCategoryModalErr] = useState("");
 
   // ---- Manage Media: toolbar ----
@@ -608,7 +611,7 @@ function AppInner() {
       const gain = ctx.createGain();
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 1024; // resolusi cukup halus untuk memisahkan pita bass s/d treble
-      analyser.smoothingTimeConstant = 0.6; // pelunakan tambahan dilakukan sendiri di visualizer
+      analyser.smoothingTimeConstant = 0.3; // pelunakan tambahan dilakukan sendiri di visualizer
       source.connect(analyser);
       analyser.connect(gain);
       gain.connect(ctx.destination);
@@ -859,6 +862,7 @@ function AppInner() {
     let data = null;
     let edges = null; // batas pita dalam satuan "bin", dihitung sekali per analyser
     const peak = new Float32Array(N).fill(0.28);
+    const avg = new Float32Array(N); // rata-rata lambat tiap pita (pembanding hentakan)
     const cur = new Float32Array(N).fill(MIN_H);
 
     function buildEdges(an) {
@@ -908,15 +912,21 @@ function AppInner() {
         let target;
         if (an && edges) {
           const v = bandLevel(edges[i], edges[i + 1]); // 0..1 absolut
-          peak[i] = Math.max(peak[i] * 0.997, v, 0.28); // puncak terbaru pita ini
+          peak[i] = Math.max(peak[i] * 0.985, v, 0.22); // puncak turun cepat -> bar tetap responsif
           const norm = Math.min(1, v / peak[i]); // 0..1 relatif terhadap pitanya
-          const weight = 0.35 + 0.65 * Math.min(1, v * 1.7); // pita yang memang pelan tidak boleh tampak tinggi
-          target = MIN_H + (MAX_H - MIN_H) * Math.pow(norm, 1.55) * weight;
+          // Hentakan: seberapa jauh level SEKARANG melampaui rata-rata lambatnya.
+          // Ini yang membuat bar melompat tiap ketukan/nada baru, bukan menempel tinggi.
+          const flux = Math.max(0, v - avg[i]);
+          avg[i] += (v - avg[i]) * 0.08;
+          const punch = Math.min(1, flux / (peak[i] * 0.45));
+          const weight = 0.3 + 0.7 * Math.min(1, v * 1.8);
+          const level = Math.pow(norm, 2.2) * weight;
+          target = MIN_H + (MAX_H - MIN_H) * Math.min(1, 0.5 * level + 0.75 * punch * weight);
         } else {
           // Belum ada analyser (belum pernah diputar): animasi lembut sementara.
           target = 0.2 + 0.16 * Math.sin(t * 1.4 + i * 0.55) + 0.1 * Math.sin(t * 0.7 + i * 1.3);
         }
-        const k = target > cur[i] ? 0.6 : 0.14; // naik cepat, turun pelan
+        const k = target > cur[i] ? 0.75 : 0.28; // naik sangat cepat, turun cukup cepat
         cur[i] += (target - cur[i]) * k;
         el.style.transform = `scaleY(${Math.min(MAX_H, Math.max(MIN_H, cur[i])).toFixed(3)})`;
       }
@@ -977,6 +987,20 @@ function AppInner() {
     setBulkAddPlaylistIds(null);
     setManageSel(new Set());
     await refreshPlaylists();
+  }
+  async function handleSavePlaylistMembers(playlistId, addIds, removeIds) {
+    setPlaylistMembersBusy(true);
+    setPlaylistMembersErr("");
+    try {
+      if (addIds.length) await addTracksToPlaylist(playlistId, addIds);
+      if (removeIds.length) await removeTracksFromPlaylist(playlistId, removeIds);
+      await refreshPlaylists();
+      setPlaylistMembersFor(null);
+    } catch (err) {
+      setPlaylistMembersErr(err.message || "Gagal menyimpan perubahan playlist.");
+    } finally {
+      setPlaylistMembersBusy(false);
+    }
   }
   async function handleReorderPlaylists(orderedIds) {
     setPlaylists((prev) => {
@@ -1366,7 +1390,7 @@ function AppInner() {
         )}
 
         {viewMode === "mini" && (
-          <div className="gp-stage-layout">
+          <div className="gp-stage-layout gp-stage-layout--scroll">
             <div className="gp-stage">
               <p className="gp-mini-hint">Video mengambang di layar — geser lewat bagian atasnya (ikon titik-titik).</p>
             </div>
@@ -1390,7 +1414,7 @@ function AppInner() {
         )}
 
         {viewMode === "audio" && (
-          <div className="gp-stage-layout">
+          <div className="gp-stage-layout gp-stage-layout--scroll">
             <div className="gp-audio-stage" ref={audioStageRef} style={{ position: "relative" }} onClick={handleFrameClick}>
               <div className="gp-disc-wrap">
                 <div className="gp-disc" style={{ animationPlayState: playing ? "running" : "paused" }}>
@@ -1479,6 +1503,10 @@ function AppInner() {
             onReorderPlaylist={handleReorderPlaylist}
             onReorderPlaylists={handleReorderPlaylists}
             onBulkAddToPlaylist={(ids) => setBulkAddPlaylistIds(ids)}
+            onEditPlaylistMembers={(pl) => {
+              setPlaylistMembersErr("");
+              setPlaylistMembersFor(pl.id);
+            }}
             exploreItems={exploreItems}
             search={manageSearch}
             setSearch={setManageSearch}
@@ -1755,53 +1783,25 @@ function AppInner() {
         onConfirm={handleConfirmDeletePlaylist}
       />
 
-      {addToPlaylistFor && (
-        <div className="confirm-backdrop" onClick={() => setAddToPlaylistFor(null)}>
-          <div className="confirm-card" onClick={(e) => e.stopPropagation()}>
-            <h3>Tambahkan "{addToPlaylistFor.title}" ke playlist</h3>
-            {playlists.length === 0 ? (
-              <p className="hint-text">Belum ada playlist — buat dulu di menu Manage Media.</p>
-            ) : (
-              <div className="user-picker-list">
-                {playlists.map((pl) => (
-                  <button key={pl.id} type="button" className="addmenu-item" onClick={() => handleAddToPlaylist(pl.id)}>
-                    {pl.name} <span className="hint-text">({pl.trackIds?.length || 0})</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="confirm-actions">
-              <button className="btn btn--ghost" onClick={() => setAddToPlaylistFor(null)}>
-                Tutup
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <PlaylistPickerModal
+        open={!!addToPlaylistFor}
+        title="Tambahkan ke playlist"
+        subtitle={addToPlaylistFor ? `\u201C${addToPlaylistFor.title}\u201D` : ""}
+        playlists={playlists}
+        emptyText="Belum ada playlist — buat dulu di menu Manage Media."
+        onPick={handleAddToPlaylist}
+        onClose={() => setAddToPlaylistFor(null)}
+      />
 
-      {bulkAddPlaylistIds && (
-        <div className="confirm-backdrop" onClick={() => setBulkAddPlaylistIds(null)}>
-          <div className="confirm-card" onClick={(e) => e.stopPropagation()}>
-            <h3>Tambahkan {bulkAddPlaylistIds.length} media ke playlist</h3>
-            {playlists.length === 0 ? (
-              <p className="hint-text">Belum ada playlist — buat dulu lewat tombol "Buat".</p>
-            ) : (
-              <div className="user-picker-list">
-                {playlists.map((pl) => (
-                  <button key={pl.id} type="button" className="addmenu-item" onClick={() => handleBulkAddToPlaylist(pl.id)}>
-                    {pl.name} <span className="hint-text">({pl.trackIds?.length || 0})</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="confirm-actions">
-              <button className="btn btn--ghost" onClick={() => setBulkAddPlaylistIds(null)}>
-                Tutup
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <PlaylistPickerModal
+        open={!!bulkAddPlaylistIds}
+        title="Tambahkan ke playlist"
+        subtitle={bulkAddPlaylistIds ? `${bulkAddPlaylistIds.length} media terpilih` : ""}
+        playlists={playlists}
+        emptyText={'Belum ada playlist \u2014 buat dulu lewat tombol "Buat".'}
+        onPick={handleBulkAddToPlaylist}
+        onClose={() => setBulkAddPlaylistIds(null)}
+      />
 
       <CreatePlaylistModal
         open={!!createPlaylistModal}
@@ -1824,6 +1824,15 @@ function AppInner() {
         err={categoryModalErr}
         onCancel={() => setAssignCategoryFor(null)}
         onPick={(name) => handleAssignCategory(assignCategoryFor, name)}
+      />
+
+      <PlaylistMembersModal
+        playlist={playlists.find((p) => p.id === playlistMembersFor) || null}
+        items={items}
+        busy={playlistMembersBusy}
+        err={playlistMembersErr}
+        onCancel={() => setPlaylistMembersFor(null)}
+        onSave={(addIds, removeIds) => handleSavePlaylistMembers(playlistMembersFor, addIds, removeIds)}
       />
 
       <CategoryMembersModal
@@ -2231,6 +2240,46 @@ function PlaylistPanel({
   );
 }
 
+// Popup pemilih playlist (satu media atau banyak media) -- gaya sama dengan
+// popup lain: judul, keterangan, daftar berbingkai yang bisa discroll.
+function PlaylistPickerModal({ open, title, subtitle, playlists, emptyText, onPick, onClose }) {
+  const [busy, setBusy] = useState(false);
+  if (!open) return null;
+  async function pick(id) {
+    setBusy(true);
+    try {
+      await onPick(id);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="confirm-backdrop" onClick={busy ? undefined : onClose}>
+      <div className="confirm-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <h3>{title}</h3>
+        {subtitle && <p className="gp-pick-sub">{subtitle}</p>}
+        {playlists.length === 0 ? (
+          <p className="hint-text">{emptyText}</p>
+        ) : (
+          <div className="gp-pick-list">
+            {playlists.map((pl) => (
+              <button key={pl.id} type="button" className="gp-pick-item" disabled={busy} onClick={() => pick(pl.id)}>
+                <span className="gp-pick-name">{pl.name}</span>
+                <span className="gp-pick-count">{pl.trackIds?.length || 0} media</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="confirm-actions" style={{ marginTop: 14 }}>
+          <button className="btn btn--ghost" onClick={onClose} disabled={busy}>
+            Tutup
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Popup: pilih SATU kategori yang sudah ada untuk satu media Explore (admin).
 function AssignCategoryModal({ media, categories, busy, err, onCancel, onPick }) {
   if (!media) return null;
@@ -2244,21 +2293,23 @@ function AssignCategoryModal({ media, categories, busy, err, onCancel, onPick })
         {categories.length === 0 ? (
           <p className="hint-text">Belum ada kategori — buat dulu lewat panel Kelola Kategori.</p>
         ) : (
-          <div className="user-picker-list">
+          <div className="gp-pick-list">
             {categories.map((c) => (
               <button
                 key={c}
                 type="button"
-                className={"addmenu-item" + (media.category === c ? " is-picked" : "")}
+                className={"gp-pick-item" + (media.category === c ? " is-picked" : "")}
                 disabled={busy || media.category === c}
                 onClick={() => onPick(c)}
               >
-                {c} {media.category === c && <span className="hint-text">(saat ini)</span>}
+                <span className="gp-pick-name">{c}</span>
+                {media.category === c && <span className="gp-pick-count">saat ini</span>}
               </button>
             ))}
             {media.category && (
-              <button type="button" className="addmenu-item" disabled={busy} onClick={() => onPick(null)}>
-                Lepas dari kategori <span className="hint-text">(tanpa kategori)</span>
+              <button type="button" className="gp-pick-item" disabled={busy} onClick={() => onPick(null)}>
+                <span className="gp-pick-name">Lepas dari kategori</span>
+                <span className="gp-pick-count">tanpa kategori</span>
               </button>
             )}
           </div>
@@ -2355,6 +2406,80 @@ function CategoryMembersModal({ category, items, busy, err, onCancel, onSave }) 
   );
 }
 
+// Popup "Lihat & edit daftar media" sebuah playlist -- bentuknya sama dengan
+// popup "Edit & Tampilkan Media" di Kelola Explore.
+function PlaylistMembersModal({ playlist, items, busy, err, onCancel, onSave }) {
+  const [sel, setSel] = useState(new Set());
+  const [search, setSearch] = useState("");
+  const plId = playlist?.id;
+  const initial = useMemo(() => new Set(playlist?.trackIds || []), [playlist]);
+
+  useEffect(() => {
+    setSel(new Set(initial));
+    setSearch("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plId]);
+
+  if (!playlist) return null;
+
+  const q = search.trim().toLowerCase();
+  const ordered = [...items]
+    .filter((m) => !q || (m.title || "").toLowerCase().includes(q))
+    .sort((a, b) => {
+      const ai = initial.has(a.id) ? 0 : 1;
+      const bi = initial.has(b.id) ? 0 : 1;
+      return ai - bi || (a.title || "").localeCompare(b.title || "");
+    });
+  const addIds = [...sel].filter((id) => !initial.has(id));
+  const removeIds = [...initial].filter((id) => !sel.has(id));
+  const changed = addIds.length + removeIds.length > 0;
+
+  function toggle(id) {
+    setSel((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  return (
+    <div className="confirm-backdrop" onClick={busy ? undefined : onCancel}>
+      <div className="confirm-card confirm-card--wide" onClick={(e) => e.stopPropagation()}>
+        <h3>Media di playlist &ldquo;{playlist.name}&rdquo;</h3>
+        <div className="field" style={{ marginBottom: 8 }}>
+          <label>
+            Centang media yang termasuk playlist ini <span className="hint-inline">({sel.size} dipilih)</span>
+          </label>
+          <input placeholder="Cari judul..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+        <div className="user-picker-list user-picker-list--tall">
+          {ordered.length === 0 ? (
+            <p className="hint-text" style={{ padding: 12 }}>
+              {items.length === 0 ? "Belum ada media." : "Tidak ada yang cocok."}
+            </p>
+          ) : (
+            ordered.map((m) => (
+              <label className="user-picker-row" key={m.id}>
+                <input type="checkbox" checked={sel.has(m.id)} onChange={() => toggle(m.id)} disabled={busy} />
+                <span className="user-picker-row__name">{m.title}</span>
+              </label>
+            ))
+          )}
+        </div>
+        {err && <p className="error-text" style={{ marginTop: 8 }}>{err}</p>}
+        <div className="confirm-actions" style={{ marginTop: 12 }}>
+          <button className="btn btn--ghost" onClick={onCancel} disabled={busy}>
+            Batal
+          </button>
+          <button className="btn btn--primary" onClick={() => onSave(addIds, removeIds)} disabled={busy || !changed}>
+            {busy ? "Menyimpan..." : "Simpan"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ManageMediaView({
   items,
   loading,
@@ -2385,6 +2510,7 @@ function ManageMediaView({
   onReorderPlaylist,
   onReorderPlaylists,
   onBulkAddToPlaylist,
+  onEditPlaylistMembers,
   exploreItems,
   search,
   setSearch,
@@ -2575,7 +2701,7 @@ function ManageMediaView({
                   style={{ width: 28, height: 28 }}
                   onClick={(e) => {
                     e.stopPropagation();
-                    setPlaylistFilter(pl.id);
+                    onEditPlaylistMembers(pl);
                   }}
                   data-tip="Lihat & edit daftar media"
                 >
@@ -2659,32 +2785,21 @@ function ManageMediaView({
         </button>
       </div>
 
-      {selectMode && rows.length > 0 && (
+      {selectMode && sel.size > 0 && (
         <div className="gp-bulkbar">
-          <label className="gp-selectall">
-            <input
-              type="checkbox"
-              checked={allSelected}
-              ref={(el) => {
-                if (el) el.indeterminate = sel.size > 0 && !allSelected;
-              }}
-              onChange={toggleAll}
-            />
-            <span>Pilih semua ({rows.length})</span>
-          </label>
-          <span className="gp-muted">{sel.size} dipilih</span>
-          {sel.size > 0 && (
-            <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-              {!activePlaylist && (
-                <button className="gp-btn sm" onClick={() => onBulkAddToPlaylist([...sel])}>
-                  Tambahkan ke playlist
-                </button>
-              )}
-              <button className="gp-btn sm danger" onClick={bulkDelete}>
-                {activePlaylist ? "Keluarkan dari playlist" : "Hapus terpilih"}
+          <span>
+            {sel.size} dipilih{sel.size < rows.length ? ` dari ${rows.length}` : ""}
+          </span>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {!activePlaylist && (
+              <button className="gp-btn sm" onClick={() => onBulkAddToPlaylist([...sel])}>
+                Tambahkan ke playlist
               </button>
-            </div>
-          )}
+            )}
+            <button className="gp-btn sm danger" onClick={bulkDelete}>
+              {activePlaylist ? "Keluarkan dari playlist" : "Hapus terpilih"}
+            </button>
+          </div>
         </div>
       )}
 
