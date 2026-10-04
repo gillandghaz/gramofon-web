@@ -1,6 +1,7 @@
+import { mediaKind } from "./media-kind";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { auth, db } from "./firebase";
-import { uploadToCloudinary } from "./cloudinary-upload";
+import { uploadToCloudinary, describeError } from "./cloudinary-upload";
 
 // Sama seperti listAllUsers()/listNotifications(): ambil semua dulu,
 // urutkan di client — menghindari bug orderBy() yang menyembunyikan
@@ -56,7 +57,7 @@ export async function uploadMediaFile(file, title, onProgress) {
     body: JSON.stringify({ fileSizeBytes: file.size }),
   });
   const signBody = await signRes.json().catch(() => ({}));
-  if (!signRes.ok) throw new Error(signBody.error || "Gagal meminta izin upload.");
+  if (!signRes.ok) throw new Error(describeError(signBody, signRes.status, "Gagal meminta izin upload."));
 
   // Langkah 2: upload langsung ke Cloudinary (XHR supaya ada progres).
   // Endpoint "video" menangani video DAN musik, dan -- bersama
@@ -76,7 +77,7 @@ export async function uploadMediaFile(file, title, onProgress) {
   // web tidak bisa membedakan Video vs Audio. Di sini kita tentukan
   // sendiri dari MIME type file ASLI (sudah divalidasi video/audio
   // sebelum upload), bukan dari respons Cloudinary.
-  const resourceType = file.type.startsWith("audio/") ? "audio" : "video";
+  const resourceType = mediaKind(file) === "audio" ? "audio" : "video";
 
   // Langkah 3: konfirmasi ke server kita — di sinilah kuota BENAR-BENAR
   // ditegakkan (pakai ukuran asli dari Cloudinary, bukan klaim browser).

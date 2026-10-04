@@ -1,3 +1,4 @@
+import { mediaKind } from "./media-kind";
 import { auth } from "./firebase";
 import { uploadToCloudinary, postJson } from "./cloudinary-upload";
 
@@ -34,7 +35,7 @@ export async function uploadExploreFile(file, title, onProgress, category) {
   const result = await uploadToCloudinary({ payload, file, resourceType: "video", onProgress });
 
   // Cloudinary melaporkan musik sebagai "video" -- bedakan lewat MIME asli.
-  const resourceType = file.type.startsWith("audio/") ? "audio" : "video";
+  const resourceType = mediaKind(file) === "audio" ? "audio" : "video";
 
   return postJson(
     "/api/explore/confirm-upload",

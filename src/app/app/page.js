@@ -1,5 +1,6 @@
 "use client";
 
+import { mediaKind } from "@/lib/media-kind";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
@@ -300,10 +301,11 @@ function AppInner() {
 
   // ---- Upload (media pribadi) ----
   async function handleFileChange(e) {
-    const file = e.target.files?.[0];
+    const input = e.target;
+    const file = input.files?.[0];
     if (!file) return;
-    e.target.value = "";
-    if (!/^(video|audio)\//.test(file.type)) {
+    if (!mediaKind(file)) {
+      input.value = "";
       setUploadErr("Hanya file video atau musik yang bisa diunggah.");
       return;
     }
@@ -317,6 +319,9 @@ function AppInner() {
       setUploadErr(err.message || "Upload gagal.");
     } finally {
       setUploading(false);
+      // Direset SETELAH selesai: di Android, mengosongkan input sebelum file
+      // dibaca bisa membuat file tidak terbaca saat diunggah.
+      input.value = "";
     }
   }
 
@@ -1058,11 +1063,15 @@ function AppInner() {
 
   // ---- Explore ----
   async function handleExploreFileChange(e) {
-    const file = e.target.files?.[0];
+    const input = e.target;
+    const file = input.files?.[0];
     if (!file) return;
-    e.target.value = "";
-    if (!isAdmin) return; // upload Explore khusus admin (server juga mengecek ulang)
-    if (!/^(video|audio)\//.test(file.type)) {
+    if (!isAdmin) {
+      input.value = "";
+      return; // upload Explore khusus admin (server juga mengecek ulang)
+    }
+    if (!mediaKind(file)) {
+      input.value = "";
       setExploreErr("Hanya file video atau musik yang bisa diunggah.");
       return;
     }
@@ -1076,6 +1085,7 @@ function AppInner() {
       setExploreErr(err.message || "Upload gagal.");
     } finally {
       setExploreUploading(false);
+      input.value = "";
     }
   }
   async function handleConfirmDeleteExplore() {
