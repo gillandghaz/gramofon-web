@@ -608,22 +608,12 @@ function AppInner() {
   //    Kalau context dibuat di luar ketukan pengguna (mis. di dalam .then()
   //    setelah play()), browser HP membiarkannya "suspended" -> hening, dan
   //    baru hidup saat pengguna mengetuk lagi (pause/play).
-  //  - Membuat source SAAT media sudah berjalan juga membuat iOS memutar
+  //  - Membuat source SAAT media sudah berjalan juga bisa membuat iOS memutar
   //    potongan buffer berulang-ulang ("suara rusak").
-  // Karena itu graph dibuat SINKRON di dalam handler ketukan, SEBELUM
-  // play() dipanggil (lihat playItem/playAtIndex/togglePlay), dan di iPhone/
-  // iPad Web Audio tidak dipakai sama sekali (iOS tidak mendukung pengaturan
-  // volume elemen & sering bermasalah dengan MediaElementSource; visualizer
-  // memakai animasi cadangan di sana).
-  function isIOS() {
-    if (typeof navigator === "undefined") return false;
-    return (
-      /iP(hone|ad|od)/.test(navigator.userAgent) ||
-      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
-    );
-  }
+  // Karena itu graph dibuat SINKRON di dalam handler ketukan, SEBELUM play()
+  // dipanggil (lihat playItem/playAtIndex/togglePlay). Graph yang sama dipakai
+  // visualizer, jadi animasi nada mengikuti musik di Android DAN iPhone.
   function ensureAudioGraph() {
-    if (isIOS()) return;
     if (audioCtxRef.current) {
       if (audioCtxRef.current.state !== "running") audioCtxRef.current.resume().catch(() => {});
       return;
@@ -647,6 +637,18 @@ function AppInner() {
       gain.gain.value = volumePercent > 100 ? volumePercent / 100 : 1;
       audioCtxRef.current = ctx;
       gainRef.current = gain;
+      // iOS/Android dapat "menahan" context lagi (telepon masuk, aplikasi di
+      // latar belakang, layar mati). Hidupkan lagi pada ketukan berikutnya.
+      ctx.onstatechange = () => {
+        if (ctx.state === "running") return;
+        const wake = () => {
+          ctx.resume().catch(() => {});
+          document.removeEventListener("pointerdown", wake, true);
+          document.removeEventListener("touchend", wake, true);
+        };
+        document.addEventListener("pointerdown", wake, true);
+        document.addEventListener("touchend", wake, true);
+      };
     } catch (e) {
       console.warn("Web Audio tidak tersedia:", e);
     }
