@@ -12,6 +12,7 @@ import {
 import { auth, googleProvider } from "@/lib/firebase";
 import { ensureUserProfile } from "@/lib/profile";
 import PasswordInput from "@/components/PasswordInput";
+import AuthRedirect from "@/components/landing/AuthRedirect";
 
 // Pesan error Firebase asli sering berbahasa Inggris & teknis (mis.
 // "auth/invalid-credential") — kita terjemahkan ke pesan yang aman dan
@@ -111,6 +112,7 @@ export default function LoginPage() {
 
   return (
     <div className="auth-shell">
+      <AuthRedirect requireProfile />
       <div className="auth-card">
         <h1>Masuk ke Gramofon</h1>
         <p className="sub">Lanjutkan mendengarkan dan menonton.</p>

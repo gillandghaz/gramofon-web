@@ -49,7 +49,14 @@ function Cta({ className = "" }) {
 export default function LandingPage() {
   return (
     <div className="lp">
-      <AuthRedirect />
+      <script
+        // Berjalan sebelum bagian halaman lain dirender: pengguna yang sudah
+        // login langsung diarahkan ke /app (lihat lib/auth-hint.js).
+        dangerouslySetInnerHTML={{
+          __html: 'try{if(localStorage.getItem("gf_auth")==="1")location.replace("/app")}catch(e){}',
+        }}
+      />
+      <AuthRedirect cover />
       <Nav />
       <main>
         <section className="lp-hero">

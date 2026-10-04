@@ -3,29 +3,35 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { hasAuthHint } from "@/lib/auth-hint";
 
-// Landing page sekarang dirender di server (terlihat langsung, ramah SEO).
-// Komponen kecil ini yang menangani "kalau sudah login, arahkan ke /app".
+// Mengalihkan pengguna yang sudah login ke /app. Dipakai di landing, /login,
+// dan /register.
 //
-// hideWhileChecking:
-//   false (default) -> landing langsung tampil; user yang SUDAH login
-//                      melihatnya sekejap sebelum dialihkan ke /app.
-//   true            -> layar kosong selama status login dicek (perilaku
-//                      lama), sehingga tidak ada "kedip" bagi user login,
-//                      tetapi pengunjung baru menunggu dulu sebelum
-//                      melihat apa pun.
-const hideWhileChecking = false;
-
-export default function AuthRedirect() {
-  const { user, loading } = useAuth();
+// Cepat: /app di-prefetch begitu halaman dibuka, dan kalau ada "petunjuk
+// login" (lihat lib/auth-hint.js) pengalihan terjadi seketika, tanpa
+// menunggu Firebase memulihkan sesi. Petunjuk basi tidak berbahaya: /app
+// memeriksa sesi sendiri dan melempar balik ke /login kalau tidak valid.
+//
+// requireProfile (untuk /login & /register): jangan mengalihkan sebelum
+// profil akun ada. Akun Google baru yang ditolak karena pendaftaran ditutup
+// tidak punya profil, jadi halaman ini tetap tampil dan menampilkan pesannya.
+//
+// cover (khusus landing): tutup halaman saat pengalihan berlangsung.
+export default function AuthRedirect({ requireProfile = false, cover = false }) {
+  const { user, profile, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && user) router.replace("/app");
-  }, [loading, user, router]);
+    router.prefetch("/app");
+    if (hasAuthHint()) router.replace("/app");
+  }, [router]);
 
-  if (user || (hideWhileChecking && loading)) {
-    return <div className="lp-cover" aria-hidden="true" />;
-  }
+  const ready = !!user && (!requireProfile || !!profile);
+  useEffect(() => {
+    if (!loading && ready) router.replace("/app");
+  }, [loading, ready, router]);
+
+  if (cover && user) return <div className="lp-cover" aria-hidden="true" />;
   return null;
 }

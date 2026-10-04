@@ -818,6 +818,7 @@ html[data-reduce-motion="true"] * {
 }
 .user-row__info {
   min-width: 0;
+  max-width: 100%;
   flex: 1 1 200px;
   overflow: hidden;
 }
@@ -1975,8 +1976,16 @@ html[data-reduce-motion="true"] * {
   }
   .user-row {
     flex-direction: column;
+    /* PENTING: nowrap. Dengan flex-wrap:wrap (aturan dasar) kolom flex
+       menjadi multi-baris, dan lebar "stretch" mengikuti isi terpanjang --
+       judul panjang melebarkan kotak jauh melewati kartu (tidak terpotong
+       "...", dan halaman jadi lebih lebar dari layar sehingga iPhone
+       memperbesar teks). nowrap membuat lebar mengikuti kartu. */
+    flex-wrap: nowrap;
     align-items: stretch;
     gap: 10px;
+    min-width: 0;
+    max-width: 100%;
   }
   .user-row__info {
     /* PENTING: netralkan flex-grow & flex-basis:160px dari rule dasar —

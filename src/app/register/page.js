@@ -9,6 +9,7 @@ import { validatePassword, validateUsername, validateEmail } from "@/lib/validat
 import { createUserProfile, isUsernameAvailable, ensureUserProfile, gateRegistration } from "@/lib/profile";
 import { isRegistrationOpen } from "@/lib/settings";
 import PasswordInput from "@/components/PasswordInput";
+import AuthRedirect from "@/components/landing/AuthRedirect";
 
 function friendlyAuthError(code) {
   switch (code) {
@@ -126,12 +127,13 @@ export default function RegisterPage() {
   }
 
   if (checkingOpen) {
-    return <div className="auth-shell" />;
+    return <div className="auth-shell"><AuthRedirect requireProfile /></div>;
   }
 
   if (!open) {
     return (
       <div className="auth-shell">
+      <AuthRedirect requireProfile />
         <div className="auth-card" style={{ textAlign: "center" }}>
           <h1>Pendaftaran ditutup</h1>
           <p className="sub">
@@ -148,6 +150,7 @@ export default function RegisterPage() {
 
   return (
     <div className="auth-shell">
+      <AuthRedirect requireProfile />
       <div className="auth-card">
         <h1>Buat akun Gramofon</h1>
         <p className="sub">Gratis, dan hanya perlu sebentar.</p>

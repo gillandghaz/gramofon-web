@@ -1,5 +1,6 @@
 "use client";
 
+import { setAuthHint } from "@/lib/auth-hint";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
@@ -25,6 +26,7 @@ export default function ProfileMenu() {
 
   async function handleLogout() {
     setLoggingOut(true);
+    setAuthHint(false); // supaya /login tidak langsung melempar balik ke /app
     await signOut(auth);
     router.push("/login");
   }

@@ -10,6 +10,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import { ensureUserProfile } from "./profile";
+import { setAuthHint } from "./auth-hint";
 
 const AuthContext = createContext({
   user: null,
@@ -27,6 +28,7 @@ export function AuthProvider({ children }) {
     // Dengarkan status login Firebase Auth.
     const unsubAuth = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
+      setAuthHint(!!firebaseUser);
       if (!firebaseUser) {
         setProfile(null);
         setLoading(false);
