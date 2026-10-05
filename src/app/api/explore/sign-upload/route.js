@@ -5,7 +5,7 @@ import { signedUploadPayload, EXPLORE_FOLDER, MEDIA_ALLOWED_FORMATS } from "@/li
 
 const DEFAULT_EXPLORE_LIMIT_MB = 5000;
 
-// Izin upload VIDEO/MUSIK ke Explore. HANYA admin. (Thumbnail punya
+// Izin upload VIDEO/AUDIO ke Explore. HANYA admin. (Thumbnail punya
 // endpoint sendiri: /api/explore/thumbnail/sign-upload.)
 export async function POST(request) {
   try {

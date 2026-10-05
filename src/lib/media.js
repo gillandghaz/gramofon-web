@@ -60,7 +60,7 @@ export async function uploadMediaFile(file, title, onProgress) {
   if (!signRes.ok) throw new Error(describeError(signBody, signRes.status, "Gagal meminta izin upload."));
 
   // Langkah 2: upload langsung ke Cloudinary (XHR supaya ada progres).
-  // Endpoint "video" menangani video DAN musik, dan -- bersama
+  // Endpoint "video" menangani video DAN audio, dan -- bersama
   // allowed_formats yang ikut ditandatangani -- menolak file jenis lain.
   const cloudinaryResult = await uploadToCloudinary({
     payload: signBody,
@@ -69,11 +69,11 @@ export async function uploadMediaFile(file, title, onProgress) {
     onProgress,
   });
 
-  // PENTING: Cloudinary TIDAK punya resource_type "audio" -- file musik
+  // PENTING: Cloudinary TIDAK punya resource_type "audio" -- file audio
   // (mp3/wav/dll) tetap dilaporkan sebagai resource_type "video" oleh
   // Cloudinary sendiri (audio ditangani lewat pipeline video mereka).
   // Kalau kita ikut-ikutan memakai cloudinaryResult.resource_type apa
-  // adanya, SEMUA musik akan tersimpan sebagai "video" -- itu sebabnya
+  // adanya, SEMUA audio akan tersimpan sebagai "video" -- itu sebabnya
   // web tidak bisa membedakan Video vs Audio. Di sini kita tentukan
   // sendiri dari MIME type file ASLI (sudah divalidasi video/audio
   // sebelum upload), bukan dari respons Cloudinary.

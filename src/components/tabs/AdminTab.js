@@ -1099,7 +1099,7 @@ function MediaSection() {
   } else if (items.length === 0) {
     bodyContent = (
       <p className="hint-text">
-        Belum ada video/musik yang diunggah pengguna. Daftar ini akan
+        Belum ada video/audio yang diunggah pengguna. Daftar ini akan
         otomatis terisi begitu fitur unggah untuk pengguna sudah aktif.
       </p>
     );

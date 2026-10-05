@@ -3,7 +3,7 @@ import { AuthProvider } from "@/lib/auth-context";
 
 export const metadata = {
   title: "Gramofon",
-  description: "Pemutar video & musik online Anda.",
+  description: "Pemutar video & audio online Anda.",
   // format-detection: mencegah Safari (terutama iPhone) otomatis mengubah
   // teks polos yang "terlihat seperti" email/nomor telepon menjadi tautan
   // bergaris bawah di mana pun di situs -- termasuk email di menu profil.

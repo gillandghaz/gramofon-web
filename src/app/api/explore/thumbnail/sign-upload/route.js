@@ -5,7 +5,7 @@ import { signedUploadPayload, EXPLORE_THUMB_FOLDER, IMAGE_ALLOWED_FORMATS } from
 
 // Izin upload THUMBNAIL satu item Explore. HANYA admin. Thumbnail berupa
 // gambar kecil di Cloudinary (folder per-item) dan tidak dihitung ke kuota
-// Explore (video/musik).
+// Explore (video/audio).
 export async function POST(request) {
   try {
     await requireAdmin(request);

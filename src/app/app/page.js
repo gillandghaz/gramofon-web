@@ -321,7 +321,7 @@ function AppInner() {
     if (!file) return;
     if (!mediaKind(file)) {
       input.value = "";
-      setUploadErr("Hanya file video atau musik yang bisa diunggah.");
+      setUploadErr("Hanya file video atau audio yang bisa diunggah.");
       return;
     }
     setUploadErr("");
@@ -648,7 +648,7 @@ function AppInner() {
   //    potongan buffer berulang-ulang ("suara rusak").
   // Karena itu graph dibuat SINKRON di dalam handler ketukan, SEBELUM play()
   // dipanggil (lihat playItem/playAtIndex/togglePlay). Graph yang sama dipakai
-  // visualizer, jadi animasi nada mengikuti musik di Android DAN iPhone.
+  // visualizer, jadi animasi nada mengikuti audio di Android DAN iPhone.
   function ensureAudioGraph() {
     if (audioCtxRef.current) {
       if (audioCtxRef.current.state !== "running") audioCtxRef.current.resume().catch(() => {});
@@ -1167,7 +1167,7 @@ function AppInner() {
     }
     if (!mediaKind(file)) {
       input.value = "";
-      setExploreErr("Hanya file video atau musik yang bisa diunggah.");
+      setExploreErr("Hanya file video atau audio yang bisa diunggah.");
       return;
     }
     setExploreErr("");
@@ -1499,7 +1499,7 @@ function AppInner() {
               ) : (
                 <div className="gp-screen" style={{ display: "flex" }}>
                   <div className="gp-empty" style={{ display: "flex" }}>
-                    <IconMusic style={{ width: 34, height: 34 }} />
+                    <IconAudio style={{ width: 34, height: 34 }} />
                     <b>Media audio</b>
                     <span>Buka menu "Audio Only" untuk visual pemutar.</span>
                   </div>
@@ -1713,7 +1713,7 @@ function AppInner() {
       <footer className="gp-bottombar">
         <div className="gp-np">
           <div className={"gp-np-thumb" + (mediaThumb(nowPlaying) ? " has-img" : "")} style={mediaThumb(nowPlaying) ? { backgroundImage: `url(${mediaThumb(nowPlaying)})` } : undefined}>
-            <span className="gp-np-ic">{nowPlaying ? nowPlaying.resourceType === "video" ? <IconFilm /> : <IconMusic /> : <IconFilm />}</span>
+            <span className="gp-np-ic">{nowPlaying ? nowPlaying.resourceType === "video" ? <IconFilm /> : <IconAudio /> : <IconFilm />}</span>
           </div>
           <div className="gp-np-text">
             <b className="gp-np-title gp-ellip gp-tip-title" data-tip={nowPlaying ? nowPlaying.title : undefined}>
@@ -2394,7 +2394,7 @@ function PlaylistPanel({
                 <button type="button" className="gp-pl-main" onClick={() => onPlay(m)}>
                   <div className={"gp-thumb" + (thumb ? " has-img" : "")} style={thumb ? { backgroundImage: `url(${thumb})` } : undefined}>
                     <span className="gp-thumb-ic">
-                      {m.resourceType === "video" ? <IconFilm style={{ width: 16, height: 16 }} /> : <IconMusic style={{ width: 16, height: 16 }} />}
+                      {m.resourceType === "video" ? <IconFilm style={{ width: 16, height: 16 }} /> : <IconAudio style={{ width: 16, height: 16 }} />}
                     </span>
                     <span className="gp-eq">
                       <i />
@@ -2853,13 +2853,13 @@ function ManageMediaView({
       <div className="gp-page-head">
         <div>
           <h2>Manage Media</h2>
-          <p>Kelola koleksi video &amp; musik pribadi Anda, dan atur playlist.</p>
+          <p>Kelola koleksi video &amp; audio pribadi Anda, dan atur playlist.</p>
         </div>
         <div>
           <input ref={fileInputRef} type="file" accept={ACCEPTED_TYPES} style={{ display: "none" }} onChange={onFileChange} />
           <button className="gp-btn primary" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
             <IconPlus style={{ width: 16, height: 16 }} />
-            {uploading ? `Mengunggah... ${progress}%` : "Upload Video/Musik"}
+            {uploading ? `Mengunggah... ${progress}%` : "Upload Video/Audio"}
           </button>
         </div>
       </div>
@@ -3059,7 +3059,7 @@ function ManageMediaView({
           <div className="gp-table-empty">Memuat...</div>
         ) : rows.length === 0 ? (
           <div className="gp-table-empty">
-            {activePlaylist ? "Playlist ini masih kosong." : "Belum ada video/musik di sini."}
+            {activePlaylist ? "Playlist ini masih kosong." : "Belum ada video/audio di sini."}
           </div>
         ) : (
           <table className="gp-table">
@@ -3123,7 +3123,7 @@ function ManageMediaView({
                   <td>
                     <div className="gp-title-cell">
                       <div className={"gp-thumb" + (thumb ? " has-img" : "")} style={{ width: 32, height: 32, ...(thumb ? { backgroundImage: `url(${thumb})` } : {}) }}>
-                        {m.resourceType === "video" ? <IconFilm style={{ width: 14, height: 14 }} /> : <IconMusic style={{ width: 14, height: 14 }} />}
+                        {m.resourceType === "video" ? <IconFilm style={{ width: 14, height: 14 }} /> : <IconAudio style={{ width: 14, height: 14 }} />}
                       </div>
                       <span className="gp-t-name gp-ellip gp-tip-title" data-tip={m.title}>{m.title}</span>
                     </div>
@@ -3410,7 +3410,7 @@ function ExploreView({
             <div key={m.id} className={"gp-xcard" + (nowPlayingId === m.id ? " is-current" : "") + (m.hidden ? " is-hidden" : "")}>
               <div className="gp-xthumb" style={thumb ? { backgroundImage: `url(${thumb})` } : undefined} onClick={() => onPlay(m, filtered, queueLabel)}>
                 <span className="gp-type-badge">
-                  {m.resourceType === "video" ? <IconFilm /> : <IconMusic />}
+                  {m.resourceType === "video" ? <IconFilm /> : <IconAudio />}
                 </span>
                 <span className="gp-xplay">
                   <PlayIcon style={{ width: 16, height: 16 }} />
@@ -3622,7 +3622,7 @@ function IconFilm(props) {
     </svg>
   );
 }
-function IconMusic(props) {
+function IconAudio(props) {
   return (
     <svg className="gp-ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" {...props}>
       <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />

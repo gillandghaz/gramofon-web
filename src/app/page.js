@@ -5,11 +5,11 @@ import Nav from "@/components/landing/Nav";
 import PlayerMock from "@/components/landing/PlayerMock";
 import "./landing.css";
 
-const DESC = "Unggah video dan musik Anda, susun playlist, lalu putar dari browser di desktop, Android, dan iPhone.";
+const DESC = "Unggah video dan audio Anda, susun playlist, lalu putar dari browser di desktop, Android, dan iPhone.";
 export const metadata = {
-  title: "Gramofon — pemutar video dan musik pribadi",
+  title: "Gramofon — pemutar video dan audio pribadi",
   description: DESC,
-  openGraph: { title: "Gramofon — pemutar video dan musik pribadi", description: DESC, type: "website", locale: "id_ID" },
+  openGraph: { title: "Gramofon — pemutar video dan audio pribadi", description: DESC, type: "website", locale: "id_ID" },
 };
 
 // Hanya fitur yang benar-benar ada di /app.
@@ -62,7 +62,7 @@ export default function LandingPage() {
         <section className="lp-hero">
           <div className="lp-wrap lp-hero__grid">
             <div>
-              <h1>Putar koleksi video dan musik Anda sendiri.</h1>
+              <h1>Putar koleksi video dan audio Anda sendiri.</h1>
               <p>Unggah, susun playlist, lalu putar dari browser. Satu akun untuk desktop, Android, dan iPhone.</p>
               <Cta />
             </div>

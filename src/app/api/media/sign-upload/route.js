@@ -57,7 +57,7 @@ export async function POST(request) {
     }
 
     // allowed_formats ikut ditandatangani: Cloudinary menolak file selain
-    // video/musik, sehingga tidak ada file "raw" liar yang menumpuk di
+    // video/audio, sehingga tidak ada file "raw" liar yang menumpuk di
     // luar hitungan kuota.
     return NextResponse.json(
       signedUploadPayload({ folder: PERSONAL_FOLDER(uid), allowedFormats: MEDIA_ALLOWED_FORMATS })

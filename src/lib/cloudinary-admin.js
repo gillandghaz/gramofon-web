@@ -1,11 +1,11 @@
 // HANYA boleh diimpor dari kode server (API routes) — kredensial di sini
 // (API Secret) TIDAK BOLEH pernah sampai ke browser.
 //
-// SEMUA file media (video, musik, thumbnail Explore, foto profil) disimpan
+// SEMUA file media (video, audio, thumbnail Explore, foto profil) disimpan
 // di Cloudinary. Firebase/Firestore hanya menyimpan data teks (URL,
 // public_id, judul, dst). Satu akun Cloudinary dibedakan lewat folder:
 //   gramofon/{uid}                      -> media pribadi pengguna
-//   gramofon-explore                    -> video/musik Explore
+//   gramofon-explore                    -> video/audio Explore
 //   gramofon-explore-thumbs/{mediaId}   -> thumbnail item Explore
 //   gramofon-avatars/{uid}              -> foto profil pengguna
 
@@ -70,10 +70,10 @@ export function signedUploadPayload({ folder, allowedFormats }) {
   };
 }
 
-// Cloudinary tidak punya resource_type "audio" — file musik disimpan
+// Cloudinary tidak punya resource_type "audio" — file audio disimpan
 // sebagai "video" (lihat catatan di lib/media.js). Aplikasi ini menyimpan
 // "audio" di Firestore, jadi harus dipetakan balik ke "video" di sini;
-// kalau tidak, penghapusan musik ditolak Cloudinary dan filenya tertinggal.
+// kalau tidak, penghapusan audio ditolak Cloudinary dan filenya tertinggal.
 function toCloudinaryType(resourceType) {
   return resourceType === "audio" ? "video" : resourceType;
 }
@@ -83,7 +83,7 @@ function authOpts() {
   return { cloud_name: creds.cloud_name, api_key: creds.api_key, api_secret: creds.api_secret };
 }
 
-// Ambil data ASLI sebuah file video/musik langsung dari Cloudinary (ukuran,
+// Ambil data ASLI sebuah file video/audio langsung dari Cloudinary (ukuran,
 // URL, durasi), supaya server tidak perlu memercayai angka dari browser.
 export async function getAssetInfo(publicId) {
   return cloudinary.api.resource(publicId, { resource_type: "video", ...authOpts() });

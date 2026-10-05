@@ -3,7 +3,7 @@
 // Di Android (dan untuk beberapa format seperti mkv/flac/opus/m4a, atau file
 // dari WhatsApp/Google Drive) browser sering mengisi file.type KOSONG atau
 // "application/octet-stream". Kalau hanya mengandalkan MIME, file sah ditolak
-// dengan pesan "Hanya file video atau musik...". Jadi MIME dipakai dulu, lalu
+// dengan pesan "Hanya file video atau audio...". Jadi MIME dipakai dulu, lalu
 // ekstensi nama file sebagai cadangan.
 const AUDIO_EXT = new Set([
   "mp3", "wav", "ogg", "oga", "m4a", "aac", "flac", "opus", "wma", "aiff", "aif", "amr", "weba", "mka",

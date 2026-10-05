@@ -133,7 +133,7 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
-    // ---- media/{mediaId} : entri video/musik milik masing-masing user.
+    // ---- media/{mediaId} : entri video/audio milik masing-masing user.
     match /media/{mediaId} {
       // Hanya pemilik atau admin. Query user biasa HARUS memakai
       // where("uid","==",uid_saya) — sudah begitu di lib/media.js.

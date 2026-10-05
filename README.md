@@ -4,7 +4,7 @@
 
 # Gramofon
 
-**Pemutar video & musik pribadi di browser — koleksi sendiri, playlist sendiri, di perangkat apa pun.**
+**Pemutar video & audio pribadi di browser — koleksi sendiri, playlist sendiri, di perangkat apa pun.**
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
@@ -22,7 +22,7 @@
 ## Ringkasan
 
 Gramofon adalah aplikasi web untuk mengunggah, mengelola, dan memutar video serta
-musik. Setiap pengguna memiliki perpustakaan (*Library*) dan playlist sendiri;
+audio. Setiap pengguna memiliki perpustakaan (*Library*) dan playlist sendiri;
 admin mengelola pengguna, kuota, dan katalog **Explore** yang dibagikan ke semua
 pengguna.
 
@@ -31,7 +31,7 @@ Prinsip rancangan:
 | Prinsip | Penerapan |
 |---|---|
 | **Firebase hanya untuk teks** | Firestore menyimpan profil & metadata. Tidak ada berkas media di Firebase. |
-| **Semua media di Cloudinary** | Video, musik, thumbnail, dan foto profil diunggah langsung ke Cloudinary. |
+| **Semua media di Cloudinary** | Video, audio, thumbnail, dan foto profil diunggah langsung ke Cloudinary. |
 | **Server sebagai penjaga** | Otorisasi, kuota, dan pembatasan pendaftaran ditegakkan di server, bukan hanya di UI. |
 | **Mobile-first** | Dirancang untuk desktop, Android, dan iPhone, termasuk kontrol layar kunci. |
 
@@ -46,7 +46,7 @@ Prinsip rancangan:
 - **Kontrol layar kunci & notifikasi** lewat Media Session API (bergantung dukungan browser/OS).
 
 ### Koleksi pribadi
-- Unggah video/musik langsung ke Cloudinary dengan **kuota per pengguna**.
+- Unggah video/audio langsung ke Cloudinary dengan **kuota per pengguna**.
 - **Playlist** dengan pengurutan drag (mouse & sentuhan) atau tombol ▲▼; urutan Library ikut tersimpan.
 - Jendela daftar media untuk memilih isi dan mengurutkan sekaligus.
 

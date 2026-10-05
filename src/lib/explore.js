@@ -31,10 +31,10 @@ export async function uploadExploreFile(file, title, onProgress, category) {
     "Gagal meminta izin upload."
   );
 
-  // Endpoint "video" menangani video DAN musik; file lain ditolak Cloudinary.
+  // Endpoint "video" menangani video DAN audio; file lain ditolak Cloudinary.
   const result = await uploadToCloudinary({ payload, file, resourceType: "video", onProgress });
 
-  // Cloudinary melaporkan musik sebagai "video" -- bedakan lewat MIME asli.
+  // Cloudinary melaporkan audio sebagai "video" -- bedakan lewat MIME asli.
   const resourceType = mediaKind(file) === "audio" ? "audio" : "video";
 
   return postJson(

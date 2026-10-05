@@ -62,7 +62,7 @@ export async function setExploreLimitMB(mb) {
 }
 
 // ---- Kategori Explore ----
-// Daftar kategori yang bisa dikelola admin (mis. "Musik", "Podcast",
+// Daftar kategori yang bisa dikelola admin (mis. "Audio", "Podcast",
 // "Film Pendek"). Kalau daftar ini kosong, UI kategori disembunyikan
 // total untuk pengguna biasa (lihat /app/page.js) — admin tetap melihat
 // panel kelola kategori supaya bisa membuat kategori pertama.
