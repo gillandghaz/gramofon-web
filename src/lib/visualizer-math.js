@@ -53,7 +53,7 @@ export function stepViz(state, db, sampleRate, fftSize) {
   const binHz = sampleRate / fftSize;
   const key = binCount + "|" + sampleRate;
   if (!state.edges || state.edgesKey !== key) {
-    state.edges = buildEdges(state, binCount, binHz, 70, Math.min(16000, sampleRate / 2 - 200));
+    state.edges = buildEdges(state, binCount, binHz, 100, Math.min(16000, sampleRate / 2 - 200));
     state.edgesKey = key;
   }
   const edges = state.edges;
@@ -97,6 +97,7 @@ export function stepViz(state, db, sampleRate, fftSize) {
   const silent = top < -95; // praktis tak ada suara
   state.silentFrames = silent ? state.silentFrames + 1 : 0;
 
+  const tg = state.tg || (state.tg = new Float32Array(N));
   for (let i = 0; i < N; i++) {
     let target;
     if (silent) {
@@ -123,6 +124,21 @@ export function stepViz(state, db, sampleRate, fftSize) {
       const punch = Math.min(1, flux * 3.4);
       target = VIZ_MIN + (VIZ_MAX - VIZ_MIN) * Math.min(1, 0.6 * shaped + 0.75 * punch * (0.45 + 0.55 * level));
     }
+    tg[i] = target;
+  }
+
+  // Penyebaran ke tetangga: bar yang pitanya tak punya energi (mis. bass pada
+  // suara orang / speaker kecil) ikut "hidup" mengikuti bar di sebelahnya,
+  // jadi tidak ada bar yang diam sendirian sementara yang lain bergerak.
+  for (let i = 0; i < N; i++) {
+    let sw = 0;
+    let sv = 0;
+    for (let d = 1; d <= 5; d++) {
+      const w = 1 / (d * d);
+      if (i - d >= 0) { sw += w; sv += w * tg[i - d]; }
+      if (i + d < N) { sw += w; sv += w * tg[i + d]; }
+    }
+    const target = silent ? tg[i] : Math.max(tg[i], 0.85 * (sv / sw));
     const k = target > state.cur[i] ? 0.8 : 0.3;
     state.cur[i] += (target - state.cur[i]) * k;
     if (state.cur[i] < VIZ_MIN) state.cur[i] = VIZ_MIN;
