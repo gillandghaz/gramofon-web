@@ -16,12 +16,15 @@ export const VIZ_MIN = 0.04;
 export const VIZ_MAX = 0.86;
 
 export function createVizState(barCount) {
+  const m = Math.ceil(barCount / 2); // separuh bar dihitung, separuh lagi cermin
   return {
     n: barCount,
+    m,
+    out: new Float32Array(barCount).fill(VIZ_MIN),
     ceil: -40, // puncak dB terbaru (AGC)
-    avg: new Float32Array(barCount), // rata-rata lambat tiap pita
-    pk: new Float32Array(barCount).fill(-200), // puncak dB terbaru tiap pita (acuan lokal)
-    cur: new Float32Array(barCount).fill(VIZ_MIN),
+    avg: new Float32Array(m), // rata-rata lambat tiap pita
+    pk: new Float32Array(m).fill(-200), // puncak dB terbaru tiap pita (acuan lokal)
+    cur: new Float32Array(m).fill(VIZ_MIN),
     edges: null,
     edgesKey: "",
     silentFrames: 0,
@@ -29,7 +32,7 @@ export function createVizState(barCount) {
 }
 
 function buildEdges(state, binCount, binHz, fmin, fmax) {
-  const N = state.n;
+  const N = state.m;
   const e = new Float32Array(N + 1);
   const ratio = fmax / fmin;
   for (let i = 0; i <= N; i++) e[i] = Math.min(binCount - 1, (fmin * Math.pow(ratio, i / N)) / binHz);
@@ -48,7 +51,7 @@ export function bytesToDb(bytes, out, minDb, maxDb) {
  * Mengembalikan state.cur (tinggi 0..1 tiap bar, sudah dibatasi VIZ_MIN..VIZ_MAX)
  */
 export function stepViz(state, db, sampleRate, fftSize) {
-  const N = state.n;
+  const N = state.m; // jumlah bar yang dihitung (separuh)
   const binCount = db.length;
   const binHz = sampleRate / fftSize;
   const key = binCount + "|" + sampleRate;
@@ -144,5 +147,13 @@ export function stepViz(state, db, sampleRate, fftSize) {
     if (state.cur[i] < VIZ_MIN) state.cur[i] = VIZ_MIN;
     if (state.cur[i] > VIZ_MAX) state.cur[i] = VIZ_MAX;
   }
-  return state.cur;
+  // Simetris: sisi kanan = bass (tengah) -> treble (tepi kanan); sisi kiri meniru
+  // sisi kanan secara cermin, jadi bass di tengah dan treble di kedua tepi.
+  const n = state.n;
+  const m = state.m;
+  for (let j = 0; j < n; j++) {
+    const h = j >= n - m ? j - (n - m) : n - 1 - j - (n - m);
+    state.out[j] = state.cur[h];
+  }
+  return state.out;
 }
