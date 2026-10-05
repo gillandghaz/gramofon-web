@@ -31,6 +31,7 @@ export async function POST(request) {
         thumbUrl: data.thumbUrl || null,
         hidden,
         createdAtMs,
+        sortKey: typeof data.order === "number" ? data.order : -createdAtMs - 1,
       };
       // Detail internal hanya untuk admin.
       if (admin) {
@@ -39,7 +40,10 @@ export async function POST(request) {
       }
       items.push(item);
     });
-    items.sort((a, b) => b.createdAtMs - a.createdAtMs);
+    // Urutan tampilan: media yang belum pernah diurutkan admin tampil paling
+    // depan (terbaru dulu), sisanya mengikuti "order" (lihat set-order).
+    items.sort((a, b) => a.sortKey - b.sortKey);
+    items.forEach((it) => delete it.sortKey);
 
     return NextResponse.json({ items });
   } catch (err) {

@@ -67,7 +67,10 @@ service cloud.firestore {
       // menampung gambar (base64) maupun URL sembarang dari klien.
       allow update: if isSignedIn()
         && request.auth.uid == userId
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'username', 'storageLimitMB', 'photoURL', 'photoPublicId']);
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'username', 'storageLimitMB', 'photoURL', 'photoPublicId'])
+        // Urutan Library: hanya daftar id, dibatasi ukurannya.
+        && (!('libraryOrder' in request.resource.data)
+            || (request.resource.data.libraryOrder is list && request.resource.data.libraryOrder.size() <= 5000));
 
       // Admin boleh mengubah field "role" milik akun mana pun (termasuk
       // sesama admin — untuk mencabut status admin akun lain).

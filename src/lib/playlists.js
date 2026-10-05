@@ -87,3 +87,10 @@ export async function removeTrackFromPlaylist(playlistId, mediaId) {
 export async function reorderPlaylistTracks(playlistId, orderedTrackIds) {
   await updateDoc(doc(db, "playlists", playlistId), { trackIds: orderedTrackIds });
 }
+
+// Urutan Library (semua media pribadi) disimpan di dokumen profil pengguna
+// sebagai daftar id (hanya teks). Media yang belum ada di daftar ini (unggahan
+// baru) tampil paling depan, terbaru dulu.
+export async function saveLibraryOrder(uid, orderedIds) {
+  await updateDoc(doc(db, "users", uid), { libraryOrder: orderedIds });
+}

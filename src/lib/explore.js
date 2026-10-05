@@ -91,3 +91,10 @@ export async function setExploreCategoryMembers(category, addIds = [], removeIds
     "Gagal menyimpan kategori."
   );
 }
+
+// Admin: simpan URUTAN media Explore. orderedIds boleh sebagian saja (mis. isi
+// satu kategori) -- media itu bertukar tempat di slot yang sudah mereka
+// tempati, urutan media lain tidak berubah.
+export async function setExploreOrder(orderedIds) {
+  return postJson("/api/explore/set-order", await token(), { orderedIds }, "Gagal menyimpan urutan.");
+}

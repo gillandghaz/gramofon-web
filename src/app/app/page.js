@@ -18,6 +18,7 @@ import {
   renameExploreCategory,
   setExploreMediaHidden,
   setExploreCategoryMembers,
+  setExploreOrder,
 } from "@/lib/explore";
 import {
   getDefaultStorageLimitMB,
@@ -34,6 +35,7 @@ import {
   deletePlaylist,
   addTrackToPlaylist,
   addTracksToPlaylist,
+  saveLibraryOrder,
   removeTrackFromPlaylist,
   removeTracksFromPlaylist,
   reorderPlaylistTracks,
@@ -43,6 +45,8 @@ import "./gramofon-player.css";
 
 const ACCEPTED_TYPES = "video/*,audio/*";
 const LIBRARY_ID = "library";
+const ALL_CATEGORY_KEY = "\u200b__semua__"; // penanda "Semua" di Kelola Kategori (bukan nama kategori sungguhan)
+const LIBRARY_VIEW_KEY = "__library_view__"; // penanda Library di popup playlist
 const VIEW_MODES = [
   { key: "theater", label: "Theater", icon: "tv" },
   { key: "mini", label: "Mini", icon: "pip" },
@@ -122,7 +126,17 @@ function AppInner() {
   const settingsAppliedRef = useRef(false);
 
   // ---- Perpustakaan pribadi ----
-  const [items, setItems] = useState([]);
+  const [rawItems, setItems] = useState([]);
+  // Library mengikuti urutan buatan pengguna (profile.libraryOrder). Media yang
+  // belum pernah diurutkan (unggahan baru) tampil paling depan, terbaru dulu.
+  const libraryOrder = profile?.libraryOrder;
+  const items = useMemo(() => {
+    if (!Array.isArray(libraryOrder) || libraryOrder.length === 0) return rawItems;
+    const pos = new Map(libraryOrder.map((id, i) => [id, i]));
+    const fresh = rawItems.filter((m) => !pos.has(m.id));
+    const ordered = rawItems.filter((m) => pos.has(m.id)).sort((a, b) => pos.get(a.id) - pos.get(b.id));
+    return [...fresh, ...ordered];
+  }, [rawItems, libraryOrder]);
   const [loading, setLoading] = useState(true);
   const [defaultLimit, setDefaultLimit] = useState(200);
   const [uploading, setUploading] = useState(false);
@@ -214,7 +228,7 @@ function AppInner() {
   const [manageSearch, setManageSearch] = useState("");
   const [manageType, setManageType] = useState("all");
   const [managePlaylist, setManagePlaylist] = useState("all");
-  const [manageSort, setManageSort] = useState("newest");
+  const [manageSort, setManageSort] = useState("custom");
   const [manageSel, setManageSel] = useState(new Set());
 
   // ---- Explore ----
@@ -1120,13 +1134,22 @@ function AppInner() {
     setManageSel(new Set());
     await refreshPlaylists();
   }
-  async function handleSavePlaylistMembers(playlistId, addIds, removeIds) {
+  // Isi + URUTAN playlist disimpan sekaligus (satu penulisan trackIds).
+  // Library (LIBRARY_VIEW_KEY) hanya menyimpan urutannya di profil pengguna.
+  async function handleSavePlaylistMembers(playlistId, finalIds) {
     setPlaylistMembersBusy(true);
     setPlaylistMembersErr("");
     try {
-      if (addIds.length) await addTracksToPlaylist(playlistId, addIds);
-      if (removeIds.length) await removeTracksFromPlaylist(playlistId, removeIds);
-      await refreshPlaylists();
+      if (playlistId === LIBRARY_VIEW_KEY) {
+        await saveLibraryOrder(user.uid, finalIds);
+      } else {
+        // Item Explore di playlist (awalan "explore:") tidak tampil di popup ini;
+        // jangan sampai ikut terhapus saat menyimpan.
+        const current = playlists.find((p) => p.id === playlistId)?.trackIds || [];
+        const keep = current.filter((id) => typeof id === "string" && id.startsWith("explore:") && !finalIds.includes(id));
+        await reorderPlaylistTracks(playlistId, [...finalIds, ...keep]);
+        await refreshPlaylists();
+      }
       setPlaylistMembersFor(null);
     } catch (err) {
       setPlaylistMembersErr(err.message || "Gagal menyimpan perubahan playlist.");
@@ -1238,14 +1261,20 @@ function AppInner() {
   }
 
   // Admin: simpan perubahan isi sebuah kategori dari popup "Edit & Tampilkan Media".
-  async function handleSaveCategoryMembers(categoryName, addIds, removeIds) {
+  // Admin: simpan isi + URUTAN sebuah kategori (atau urutan "Semua").
+  async function handleSaveCategoryMembers(categoryName, finalIds) {
     setCategoryModalBusy(true);
     setCategoryModalErr("");
     try {
-      if (addIds.length || removeIds.length) {
-        await setExploreCategoryMembers(categoryName, addIds, removeIds);
-        setExploreItems(await listExploreMedia());
+      if (categoryName !== ALL_CATEGORY_KEY) {
+        const initial = new Set(exploreItems.filter((m) => m.category === categoryName).map((m) => m.id));
+        const finalSet = new Set(finalIds);
+        const addIds = finalIds.filter((id) => !initial.has(id));
+        const removeIds = [...initial].filter((id) => !finalSet.has(id));
+        if (addIds.length || removeIds.length) await setExploreCategoryMembers(categoryName, addIds, removeIds);
       }
+      if (finalIds.length > 0) await setExploreOrder(finalIds);
+      setExploreItems(await listExploreMedia());
       setCategoryMembersFor(null);
     } catch (err) {
       setCategoryModalErr(err.message || "Gagal menyimpan perubahan kategori.");
@@ -1966,23 +1995,57 @@ function AppInner() {
         onPick={(name) => handleAssignCategory(assignCategoryFor, name)}
       />
 
-      <PlaylistMembersModal
-        playlist={playlists.find((p) => p.id === playlistMembersFor) || null}
-        items={items}
-        busy={playlistMembersBusy}
-        err={playlistMembersErr}
-        onCancel={() => setPlaylistMembersFor(null)}
-        onSave={(addIds, removeIds) => handleSavePlaylistMembers(playlistMembersFor, addIds, removeIds)}
-      />
+      {(() => {
+        const isLib = playlistMembersFor === LIBRARY_VIEW_KEY;
+        const pl = isLib ? null : playlists.find((p) => p.id === playlistMembersFor) || null;
+        const open = isLib || !!pl;
+        return (
+          <OrderedMembersModal
+            open={open}
+            resetKey={playlistMembersFor}
+            title={isLib ? "Library (Semua media)" : `Media di playlist \u201c${pl?.name || ""}\u201d`}
+            hint={isLib ? "Seret untuk mengurutkan semua media Anda" : "Centang media yang termasuk playlist ini, seret untuk mengurutkan"}
+            items={items}
+            initialIds={isLib ? items.map((m) => m.id) : pl?.trackIds || []}
+            selectable={!isLib}
+            reorderable
+            busy={playlistMembersBusy}
+            err={playlistMembersErr}
+            onCancel={() => setPlaylistMembersFor(null)}
+            onSave={(finalIds) => handleSavePlaylistMembers(playlistMembersFor, finalIds)}
+          />
+        );
+      })()}
 
-      <CategoryMembersModal
-        category={categoryMembersFor}
-        items={exploreItems}
-        busy={categoryModalBusy}
-        err={categoryModalErr}
-        onCancel={() => setCategoryMembersFor(null)}
-        onSave={(addIds, removeIds) => handleSaveCategoryMembers(categoryMembersFor, addIds, removeIds)}
-      />
+      {(() => {
+        const isAll = categoryMembersFor === ALL_CATEGORY_KEY;
+        const open = !!categoryMembersFor;
+        return (
+          <OrderedMembersModal
+            open={open}
+            resetKey={categoryMembersFor}
+            title={isAll ? "Semua media Explore" : `Media di kategori \u201c${categoryMembersFor || ""}\u201d`}
+            hint={isAll ? "Seret untuk mengurutkan semua media Explore" : "Centang media yang termasuk kategori ini, seret untuk mengurutkan"}
+            items={exploreItems}
+            initialIds={isAll ? exploreItems.map((m) => m.id) : exploreItems.filter((m) => m.category === categoryMembersFor).map((m) => m.id)}
+            selectable={!isAll}
+            reorderable
+            busy={categoryModalBusy}
+            err={categoryModalErr}
+            extraTag={(m) => (
+              <>
+                {!isAll ? null : m.category && <span className="gp-mini-tag">{m.category}</span>}
+                {isAll ? null : m.category && m.category !== categoryMembersFor && (
+                  <span className="gp-mini-tag" title="Akan dipindahkan dari kategori ini">{m.category}</span>
+                )}
+                {m.hidden && <span className="gp-mini-tag is-hidden">Hidden</span>}
+              </>
+            )}
+            onCancel={() => setCategoryMembersFor(null)}
+            onSave={(finalIds) => handleSaveCategoryMembers(categoryMembersFor, finalIds)}
+          />
+        );
+      })()}
 
       <ConfirmDialog
         open={!!deleteCategoryTarget}
@@ -2465,155 +2528,143 @@ function AssignCategoryModal({ media, categories, busy, err, onCancel, onPick })
   );
 }
 
-// Popup "Edit & Tampilkan Media": daftar media di sebuah kategori + tempat
-// mengubah media mana saja yang termasuk di dalamnya (admin).
-function CategoryMembersModal({ category, items, busy, err, onCancel, onSave }) {
-  const [sel, setSel] = useState(new Set());
+// Popup bersama untuk "Lihat & edit daftar media" (Playlist) dan
+// "Edit & Tampilkan Media" (Kategori Explore): memilih media mana yang
+// termasuk DAN mengurutkannya (seret ikon di kiri, atau tombol panah).
+//   selectable : ada kotak centang untuk memilih anggota (Playlist/Kategori).
+//                false = semua media otomatis anggota (Library / Semua).
+//   reorderable: urutan bisa diubah.
+//   readOnly   : hanya melihat daftar.
+function OrderedMembersModal({
+  open,
+  resetKey,
+  title,
+  hint,
+  items,
+  initialIds,
+  selectable = true,
+  reorderable = true,
+  readOnly = false,
+  busy,
+  err,
+  extraTag,
+  onCancel,
+  onSave,
+}) {
+  const [ids, setIds] = useState([]);
   const [search, setSearch] = useState("");
-  const initial = useMemo(
-    () => new Set(category ? items.filter((m) => m.category === category).map((m) => m.id) : []),
-    [category, items]
-  );
+  const [dragIdx, setDragIdx] = useState(null);
+  const [overIdx, setOverIdx] = useState(null);
 
-  // Setiap kali popup dibuka untuk kategori tertentu, mulai dari isi sebenarnya.
+  // Setiap kali popup dibuka (untuk playlist/kategori tertentu) mulai dari isi sebenarnya.
   useEffect(() => {
-    setSel(new Set(initial));
+    setIds([...initialIds]);
     setSearch("");
+    setDragIdx(null);
+    setOverIdx(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category]);
+  }, [resetKey, open]);
 
-  if (!category) return null;
+  if (!open) return null;
 
+  const byId = new Map(items.map((m) => [m.id, m]));
   const q = search.trim().toLowerCase();
-  const ordered = [...items]
-    .filter((m) => !q || (m.title || "").toLowerCase().includes(q))
-    .sort((a, b) => {
-      const ai = initial.has(a.id) ? 0 : 1;
-      const bi = initial.has(b.id) ? 0 : 1;
-      return ai - bi || (a.title || "").localeCompare(b.title || "");
-    });
-  const addIds = [...sel].filter((id) => !initial.has(id));
-  const removeIds = [...initial].filter((id) => !sel.has(id));
-  const changed = addIds.length + removeIds.length > 0;
+  const selectedIds = ids.filter((id) => byId.has(id));
+  const selectedSet = new Set(selectedIds);
+  const matches = (m) => !q || (m.title || "").toLowerCase().includes(q);
+  const unselected = selectable
+    ? items.filter((m) => !selectedSet.has(m.id) && matches(m)).sort((a, b) => (a.title || "").localeCompare(b.title || ""))
+    : [];
+  const canDrag = reorderable && !readOnly && !q && !busy;
+
+  const initialKey = initialIds.filter((id) => byId.has(id)).join("|");
+  const changed = selectedIds.join("|") !== initialKey;
 
   function toggle(id) {
-    setSel((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+    setIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+  function move(from, to) {
+    if (from === to || from < 0 || to < 0 || to >= selectedIds.length) return;
+    const next = [...selectedIds];
+    const [m] = next.splice(from, 1);
+    next.splice(to, 0, m);
+    setIds(next);
+  }
+  function handleDrop(idx) {
+    if (dragIdx !== null) move(dragIdx, idx);
+    setDragIdx(null);
+    setOverIdx(null);
   }
 
   return (
     <div className="confirm-backdrop" onClick={busy ? undefined : onCancel}>
       <div className="confirm-card confirm-card--wide" onClick={(e) => e.stopPropagation()}>
-        <h3>Media di kategori &ldquo;{category}&rdquo;</h3>
+        <h3>{title}</h3>
         <div className="field" style={{ marginBottom: 8 }}>
           <label>
-            Centang media yang termasuk kategori ini <span className="hint-inline">({sel.size} dipilih)</span>
+            {hint} <span className="hint-inline">({selectedIds.length}{selectable ? " dipilih" : " media"})</span>
           </label>
           <input placeholder="Cari judul..." value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         <div className="user-picker-list user-picker-list--tall">
-          {ordered.length === 0 ? (
-            <p className="hint-text" style={{ padding: 12 }}>
-              {items.length === 0 ? "Belum ada media di Explore." : "Tidak ada yang cocok."}
-            </p>
-          ) : (
-            ordered.map((m) => (
-              <label className="user-picker-row" key={m.id}>
-                <input type="checkbox" checked={sel.has(m.id)} onChange={() => toggle(m.id)} disabled={busy} />
-                <span className="user-picker-row__name">{m.title}</span>
-                {m.category && m.category !== category && (
-                  <span className="gp-mini-tag" title="Akan dipindahkan dari kategori ini">{m.category}</span>
-                )}
-                {m.hidden && <span className="gp-mini-tag is-hidden">Hidden</span>}
-              </label>
-            ))
-          )}
-        </div>
-        {err && <p className="error-text" style={{ marginTop: 8 }}>{err}</p>}
-        <div className="confirm-actions" style={{ marginTop: 12 }}>
-          <button className="btn btn--ghost" onClick={onCancel} disabled={busy}>
-            Batal
-          </button>
-          <button className="btn btn--primary" onClick={() => onSave(addIds, removeIds)} disabled={busy || !changed}>
-            {busy ? "Menyimpan..." : "Simpan"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Popup "Lihat & edit daftar media" sebuah playlist -- bentuknya sama dengan
-// popup "Edit & Tampilkan Media" di Kelola Explore.
-function PlaylistMembersModal({ playlist, items, busy, err, onCancel, onSave }) {
-  const [sel, setSel] = useState(new Set());
-  const [search, setSearch] = useState("");
-  const plId = playlist?.id;
-  const initial = useMemo(() => new Set(playlist?.trackIds || []), [playlist]);
-
-  useEffect(() => {
-    setSel(new Set(initial));
-    setSearch("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plId]);
-
-  if (!playlist) return null;
-
-  const q = search.trim().toLowerCase();
-  const ordered = [...items]
-    .filter((m) => !q || (m.title || "").toLowerCase().includes(q))
-    .sort((a, b) => {
-      const ai = initial.has(a.id) ? 0 : 1;
-      const bi = initial.has(b.id) ? 0 : 1;
-      return ai - bi || (a.title || "").localeCompare(b.title || "");
-    });
-  const addIds = [...sel].filter((id) => !initial.has(id));
-  const removeIds = [...initial].filter((id) => !sel.has(id));
-  const changed = addIds.length + removeIds.length > 0;
-
-  function toggle(id) {
-    setSel((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  }
-
-  return (
-    <div className="confirm-backdrop" onClick={busy ? undefined : onCancel}>
-      <div className="confirm-card confirm-card--wide" onClick={(e) => e.stopPropagation()}>
-        <h3>Media di playlist &ldquo;{playlist.name}&rdquo;</h3>
-        <div className="field" style={{ marginBottom: 8 }}>
-          <label>
-            Centang media yang termasuk playlist ini <span className="hint-inline">({sel.size} dipilih)</span>
-          </label>
-          <input placeholder="Cari judul..." value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
-        <div className="user-picker-list user-picker-list--tall">
-          {ordered.length === 0 ? (
+          {selectedIds.length === 0 && unselected.length === 0 ? (
             <p className="hint-text" style={{ padding: 12 }}>
               {items.length === 0 ? "Belum ada media." : "Tidak ada yang cocok."}
             </p>
-          ) : (
-            ordered.map((m) => (
-              <label className="user-picker-row" key={m.id}>
-                <input type="checkbox" checked={sel.has(m.id)} onChange={() => toggle(m.id)} disabled={busy} />
-                <span className="user-picker-row__name">{m.title}</span>
+          ) : null}
+          {selectedIds.map((id, idx) => {
+            const m = byId.get(id);
+            if (!matches(m)) return null;
+            return (
+              <div
+                key={id}
+                className={"gp-omrow" + (dragIdx === idx ? " is-dragging" : "") + (overIdx === idx && dragIdx !== null && dragIdx !== idx ? " is-dragover" : "")}
+                draggable={canDrag}
+                onDragStart={canDrag ? () => setDragIdx(idx) : undefined}
+                onDragOver={canDrag ? (e) => { e.preventDefault(); setOverIdx(idx); } : undefined}
+                onDrop={canDrag ? () => handleDrop(idx) : undefined}
+                onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
+              >
+                {reorderable && !readOnly && (
+                  <span className={"gp-drag-handle" + (canDrag ? "" : " is-off")} data-tip={canDrag ? "Geser untuk urutkan" : "Hapus pencarian untuk mengurutkan"}>
+                    <IconGrip style={{ width: 14, height: 14 }} />
+                  </span>
+                )}
+                {selectable && !readOnly && (
+                  <input type="checkbox" checked onChange={() => toggle(id)} disabled={busy} aria-label={`Keluarkan ${m.title}`} />
+                )}
+                <span className="gp-omname">{m.title}</span>
+                {extraTag && extraTag(m)}
+                {canDrag && (
+                  <span className="gp-omarrows">
+                    <button type="button" className="gp-omarrow" onClick={() => move(idx, idx - 1)} disabled={idx === 0} aria-label="Naik">▲</button>
+                    <button type="button" className="gp-omarrow" onClick={() => move(idx, idx + 1)} disabled={idx === selectedIds.length - 1} aria-label="Turun">▼</button>
+                  </span>
+                )}
+              </div>
+            );
+          })}
+          {selectable && !readOnly && unselected.length > 0 && selectedIds.length > 0 && <div className="gp-omsep">Belum dipilih</div>}
+          {selectable && !readOnly &&
+            unselected.map((m) => (
+              <label className="gp-omrow gp-omrow--off" key={m.id}>
+                {reorderable && <span className="gp-drag-spacer" aria-hidden="true" />}
+                <input type="checkbox" checked={false} onChange={() => toggle(m.id)} disabled={busy} />
+                <span className="gp-omname">{m.title}</span>
+                {extraTag && extraTag(m)}
               </label>
-            ))
-          )}
+            ))}
         </div>
         {err && <p className="error-text" style={{ marginTop: 8 }}>{err}</p>}
         <div className="confirm-actions" style={{ marginTop: 12 }}>
           <button className="btn btn--ghost" onClick={onCancel} disabled={busy}>
-            Batal
+            {readOnly ? "Tutup" : "Batal"}
           </button>
-          <button className="btn btn--primary" onClick={() => onSave(addIds, removeIds)} disabled={busy || !changed}>
-            {busy ? "Menyimpan..." : "Simpan"}
-          </button>
+          {!readOnly && (
+            <button className="btn btn--primary" onClick={() => onSave(selectedIds)} disabled={busy || !changed}>
+              {busy ? "Menyimpan..." : "Simpan"}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -2686,6 +2737,7 @@ function ManageMediaView({
   }
   if (!canDrag) {
     rows = [...rows].sort((a, b) => {
+      if (sortBy === "custom") return 0; // pertahankan urutan Library / playlist
       if (sortBy === "title") return (a.title || "").localeCompare(b.title || "");
       if (sortBy === "sizeDesc") return (b.bytes || 0) - (a.bytes || 0);
       if (sortBy === "sizeAsc") return (a.bytes || 0) - (b.bytes || 0);
@@ -2812,6 +2864,17 @@ function ManageMediaView({
                 <b>Library (Semua media)</b>
                 <small>{items.length} media</small>
               </div>
+              <button
+                className="gp-ibtn"
+                style={{ width: 28, height: 28 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEditPlaylistMembers({ id: LIBRARY_VIEW_KEY });
+                }}
+                data-tip="Lihat & edit daftar media"
+              >
+                <IconListEdit style={{ width: 14, height: 14 }} />
+              </button>
             </li>
             {playlists.map((pl, idx) => (
               <li
@@ -2907,6 +2970,7 @@ function ManageMediaView({
         </select>
         {!canDrag && (
           <select className="gp-select-plain" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+            <option value="custom">Urutan saya</option>
             <option value="newest">Terbaru</option>
             <option value="title">Judul (A-Z)</option>
             <option value="sizeDesc">Ukuran terbesar</option>
@@ -3193,10 +3257,15 @@ function ExploreView({
             <div className="gp-card-title">
               <h3>Kelola Kategori</h3>
             </div>
-            {categories.length === 0 ? (
-              <p className="gp-muted" style={{ fontSize: 12.5 }}>Belum ada kategori.</p>
-            ) : (
+            {(
               <ul className="gp-catlist">
+                <li className="gp-catrow">
+                  <span className="gp-drag-spacer" aria-hidden="true" />
+                  <span className="gp-catname">Semua</span>
+                  <button className="gp-ibtn" style={{ width: 26, height: 26 }} onClick={() => onEditCategoryMembersClick(ALL_CATEGORY_KEY)} data-tip="Edit & Tampilkan Media">
+                    <IconListEdit style={{ width: 13, height: 13 }} />
+                  </button>
+                </li>
                 {categories.map((c, idx) => (
                   <li
                     key={c}
