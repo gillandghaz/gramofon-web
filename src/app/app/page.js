@@ -1,5 +1,6 @@
 "use client";
 
+import { createVizState, stepViz, bytesToDb, VIZ_MIN, VIZ_MAX } from "@/lib/visualizer-math";
 import { mediaKind } from "@/lib/media-kind";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -663,8 +664,8 @@ function AppInner() {
       const source = ctx.createMediaElementSource(playerRef.current);
       const gain = ctx.createGain();
       const analyser = ctx.createAnalyser();
-      analyser.fftSize = 1024; // resolusi cukup halus untuk memisahkan pita bass s/d treble
-      analyser.smoothingTimeConstant = 0.3; // pelunakan tambahan dilakukan sendiri di visualizer
+      analyser.fftSize = 2048; // bin ~21 Hz: pita bass terpisah jelas
+      analyser.smoothingTimeConstant = 0.4; // pelunakan tambahan dilakukan di visualizer-math
       source.connect(analyser);
       analyser.connect(gain);
       gain.connect(ctx.destination);
@@ -977,104 +978,55 @@ function AppInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ---- Visualizer Audio Only (bar naik-turun mengikuti spektrum audio) ----
-  // Desain agar terasa hidup & bervariasi, termasuk untuk lagu bernada tinggi:
-  //  1) Bar dipetakan ke pita frekuensi berskala LOGARITMIK (60Hz-16kHz),
-  //     seperti telinga manusia -- bukan linear, yang membuat bass menguasai
-  //     hampir semua bar.
-  //  2) Tiap pita dinormalisasi terhadap "puncak terbarunya" sendiri (peluruhan
-  //     lambat), jadi nada tinggi yang energinya kecil tetap tampak bergerak
-  //     sama jelasnya dengan bass, tanpa harus dikali besar-besaran (yang dulu
-  //     membuat bar mentok penuh).
-  //  3) Kurva dibuat "mengembang" (pangkat > 1) + dibobot level absolut, jadi
-  //     bagian pelan benar-benar rendah dan hanya hentakan kuat yang tinggi.
-  //  4) Tinggi bar DIBATASI maksimum 86% -- tidak pernah penuh.
-  //  5) Naik cepat, turun pelan (attack/release) untuk gerak yang natural.
+  // ---- Visualizer Audio Only (bar mengikuti spektrum suara asli) ----
+  // Seluruh perhitungan ada di src/lib/visualizer-math.js (pita logaritmik
+  // 50Hz-16kHz, AGC dalam dB, kompensasi kemiringan spektrum, komponen
+  // "hentakan" untuk fluktuasi). Di sini hanya membaca AnalyserNode tiap frame.
   useEffect(() => {
     if (viewMode !== "audio") return;
     const bars = barsRef.current;
     const N = bars.length;
-    const MIN_H = 0.04;
-    const MAX_H = 0.86;
-    const FMIN = 60;
-    const FMAX = 16000;
     const setAll = (v) => bars.forEach((b) => b && (b.style.transform = `scaleY(${v})`));
     if (!playing) {
-      setAll(MIN_H);
+      setAll(VIZ_MIN);
       return;
     }
     let raf;
     let t = 0;
-    let data = null;
-    let edges = null; // batas pita dalam satuan "bin", dihitung sekali per analyser
-    const peak = new Float32Array(N).fill(0.28);
-    const avg = new Float32Array(N); // rata-rata lambat tiap pita (pembanding hentakan)
-    const cur = new Float32Array(N).fill(MIN_H);
-
-    function buildEdges(an) {
-      const sr = audioCtxRef.current?.sampleRate || 44100;
-      const binHz = sr / an.fftSize;
-      const maxBin = an.frequencyBinCount - 1;
-      const ratio = FMAX / FMIN;
-      const e = new Float32Array(N + 1);
-      for (let i = 0; i <= N; i++) e[i] = Math.min(maxBin, (FMIN * Math.pow(ratio, i / N)) / binHz);
-      return e;
-    }
-    function bandLevel(lo, hi) {
-      const last = data.length - 1;
-      if (hi - lo < 1) {
-        // Pita lebih sempit dari satu bin (bass): interpolasi di titik tengahnya.
-        const c = (lo + hi) / 2;
-        const i = Math.floor(c);
-        const f = c - i;
-        return (data[i] * (1 - f) + data[Math.min(i + 1, last)] * f) / 255;
-      }
-      let max = 0;
-      let sum = 0;
-      let cnt = 0;
-      for (let k = Math.floor(lo); k <= Math.min(last, Math.ceil(hi)); k++) {
-        const d = data[k];
-        if (d > max) max = d;
-        sum += d;
-        cnt++;
-      }
-      return (0.55 * max + 0.45 * (sum / cnt)) / 255;
-    }
+    let fl = null; // Float32Array dB
+    let by = null; // cadangan bila getFloatFrequencyData tidak ada
+    const state = createVizState(N);
 
     function draw() {
       raf = requestAnimationFrame(draw);
       t += 0.07;
       const an = analyserRef.current;
+      const sr = audioCtxRef.current?.sampleRate || 44100;
       if (an) {
-        if (!data || data.length !== an.frequencyBinCount) {
-          data = new Uint8Array(an.frequencyBinCount);
-          edges = buildEdges(an);
+        if (!fl || fl.length !== an.frequencyBinCount) {
+          fl = new Float32Array(an.frequencyBinCount);
+          by = null;
         }
-        an.getByteFrequencyData(data);
-      }
-      for (let i = 0; i < N; i++) {
-        const el = bars[i];
-        if (!el) continue;
-        let target;
-        if (an && edges) {
-          const v = bandLevel(edges[i], edges[i + 1]); // 0..1 absolut
-          peak[i] = Math.max(peak[i] * 0.985, v, 0.22); // puncak turun cepat -> bar tetap responsif
-          const norm = Math.min(1, v / peak[i]); // 0..1 relatif terhadap pitanya
-          // Hentakan: seberapa jauh level SEKARANG melampaui rata-rata lambatnya.
-          // Ini yang membuat bar melompat tiap ketukan/nada baru, bukan menempel tinggi.
-          const flux = Math.max(0, v - avg[i]);
-          avg[i] += (v - avg[i]) * 0.08;
-          const punch = Math.min(1, flux / (peak[i] * 0.45));
-          const weight = 0.3 + 0.7 * Math.min(1, v * 1.8);
-          const level = Math.pow(norm, 2.2) * weight;
-          target = MIN_H + (MAX_H - MIN_H) * Math.min(1, 0.5 * level + 0.75 * punch * weight);
+        if (typeof an.getFloatFrequencyData === "function") {
+          an.getFloatFrequencyData(fl);
         } else {
-          // Belum ada analyser (belum pernah diputar): animasi lembut sementara.
-          target = 0.2 + 0.16 * Math.sin(t * 1.4 + i * 0.55) + 0.1 * Math.sin(t * 0.7 + i * 1.3);
+          if (!by) by = new Uint8Array(an.frequencyBinCount);
+          an.getByteFrequencyData(by);
+          bytesToDb(by, fl, an.minDecibels, an.maxDecibels);
         }
-        const k = target > cur[i] ? 0.75 : 0.28; // naik sangat cepat, turun cukup cepat
-        cur[i] += (target - cur[i]) * k;
-        el.style.transform = `scaleY(${Math.min(MAX_H, Math.max(MIN_H, cur[i])).toFixed(3)})`;
+        const h = stepViz(state, fl, sr, an.fftSize);
+        for (let i = 0; i < N; i++) {
+          const el = bars[i];
+          if (el) el.style.transform = `scaleY(${h[i].toFixed(3)})`;
+        }
+      } else {
+        // Belum ada analyser (belum pernah diputar): animasi lembut sementara.
+        for (let i = 0; i < N; i++) {
+          const el = bars[i];
+          if (!el) continue;
+          const v = 0.2 + 0.16 * Math.sin(t * 1.4 + i * 0.55) + 0.1 * Math.sin(t * 0.7 + i * 1.3);
+          el.style.transform = `scaleY(${Math.min(VIZ_MAX, Math.max(VIZ_MIN, v)).toFixed(3)})`;
+        }
       }
     }
     draw();
