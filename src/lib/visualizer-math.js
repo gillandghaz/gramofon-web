@@ -53,7 +53,7 @@ export function stepViz(state, db, sampleRate, fftSize) {
   const binHz = sampleRate / fftSize;
   const key = binCount + "|" + sampleRate;
   if (!state.edges || state.edgesKey !== key) {
-    state.edges = buildEdges(state, binCount, binHz, 50, Math.min(16000, sampleRate / 2 - 200));
+    state.edges = buildEdges(state, binCount, binHz, 70, Math.min(16000, sampleRate / 2 - 200));
     state.edgesKey = key;
   }
   const edges = state.edges;
@@ -107,16 +107,16 @@ export function stepViz(state, db, sampleRate, fftSize) {
       // Acuan ganda: global (seluruh lagu) + lokal (pita itu sendiri). Pita yang
       // energinya kecil (mis. bass di speaker HP / lagu tanpa bass) tetap
       // bergerak mengikuti naik-turunnya sendiri, tidak diam di dasar.
-      state.pk[i] = Math.max(levelsDb[i], state.pk[i] - 0.06);
-      const refLocal = Math.max(state.pk[i], state.ceil - 55);
+      state.pk[i] = Math.max(levelsDb[i], state.pk[i] - 0.14);
+      const refLocal = Math.max(state.pk[i], state.ceil - 70);
       const lGlobal = (levelsDb[i] - (state.ceil - RANGE)) / RANGE;
       const lLocal = (levelsDb[i] - (refLocal - 30)) / 30;
       // Gerbang absolut: derau sangat halus (< -100 dB) tidak boleh dibesarkan oleh acuan lokal.
       const gate = Math.min(1, Math.max(0, (levelsDb[i] + 100) / 15));
-      const level = Math.min(1, Math.max(0, 0.5 * lGlobal + 0.5 * lLocal)) * gate;
+      const level = Math.min(1, Math.max(0, 0.3 * lGlobal + 0.7 * lLocal)) * gate;
       // Komponen rentang lebar (60 dB): bar tidak pernah "mati" selama pitanya
       // masih punya energi terukur, tapi tetap turun jauh saat benar-benar sepi.
-      const soft = Math.min(1, Math.max(0, (levelsDb[i] - (Math.max(state.pk[i], state.ceil - 55) - 60)) / 60));
+      const soft = Math.min(1, Math.max(0, (levelsDb[i] - (Math.max(state.pk[i], state.ceil - 70) - 60)) / 60));
       const shaped = 0.78 * Math.pow(level, 1.7) + 0.22 * soft * gate;
       const flux = Math.max(0, level - state.avg[i]);
       state.avg[i] += (level - state.avg[i]) * 0.12;
