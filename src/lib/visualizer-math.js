@@ -20,6 +20,7 @@ export function createVizState(barCount) {
     n: barCount,
     ceil: -40, // puncak dB terbaru (AGC)
     avg: new Float32Array(barCount), // rata-rata lambat tiap pita
+    pk: new Float32Array(barCount).fill(-200), // puncak dB terbaru tiap pita (acuan lokal)
     cur: new Float32Array(barCount).fill(VIZ_MIN),
     edges: null,
     edgesKey: "",
@@ -101,9 +102,22 @@ export function stepViz(state, db, sampleRate, fftSize) {
     if (silent) {
       target = VIZ_MIN;
       state.avg[i] *= 0.9;
+      state.pk[i] = Math.max(-200, state.pk[i] - 0.5);
     } else {
-      const level = Math.min(1, Math.max(0, (levelsDb[i] - (state.ceil - RANGE)) / RANGE));
-      const shaped = Math.pow(level, 1.7);
+      // Acuan ganda: global (seluruh lagu) + lokal (pita itu sendiri). Pita yang
+      // energinya kecil (mis. bass di speaker HP / lagu tanpa bass) tetap
+      // bergerak mengikuti naik-turunnya sendiri, tidak diam di dasar.
+      state.pk[i] = Math.max(levelsDb[i], state.pk[i] - 0.06);
+      const refLocal = Math.max(state.pk[i], state.ceil - 55);
+      const lGlobal = (levelsDb[i] - (state.ceil - RANGE)) / RANGE;
+      const lLocal = (levelsDb[i] - (refLocal - 30)) / 30;
+      // Gerbang absolut: derau sangat halus (< -100 dB) tidak boleh dibesarkan oleh acuan lokal.
+      const gate = Math.min(1, Math.max(0, (levelsDb[i] + 100) / 15));
+      const level = Math.min(1, Math.max(0, 0.5 * lGlobal + 0.5 * lLocal)) * gate;
+      // Komponen rentang lebar (60 dB): bar tidak pernah "mati" selama pitanya
+      // masih punya energi terukur, tapi tetap turun jauh saat benar-benar sepi.
+      const soft = Math.min(1, Math.max(0, (levelsDb[i] - (Math.max(state.pk[i], state.ceil - 55) - 60)) / 60));
+      const shaped = 0.78 * Math.pow(level, 1.7) + 0.22 * soft * gate;
       const flux = Math.max(0, level - state.avg[i]);
       state.avg[i] += (level - state.avg[i]) * 0.12;
       const punch = Math.min(1, flux * 3.4);

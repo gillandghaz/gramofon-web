@@ -996,6 +996,15 @@ function AppInner() {
     let fl = null; // Float32Array dB
     let by = null; // cadangan bila getFloatFrequencyData tidak ada
     const state = createVizState(N);
+    // Sinkron dengan suara yang TERDENGAR: analyser membaca suara sebelum keluar
+    // dari perangkat. Pada Bluetooth/speaker HP ada jeda keluaran (outputLatency),
+    // jadi tampilan ditunda sebesar jeda itu agar bar jatuh tepat saat nada terdengar.
+    const queue = []; // { t: waktu ms, h: Float32Array }
+    function currentDelayMs() {
+      const c = audioCtxRef.current;
+      const ol = c && typeof c.outputLatency === "number" ? c.outputLatency : 0;
+      return Math.min(500, Math.max(0, ol * 1000 - 25));
+    }
 
     function draw() {
       raf = requestAnimationFrame(draw);
@@ -1014,7 +1023,13 @@ function AppInner() {
           an.getByteFrequencyData(by);
           bytesToDb(by, fl, an.minDecibels, an.maxDecibels);
         }
-        const h = stepViz(state, fl, sr, an.fftSize);
+        const now = performance.now();
+        queue.push({ t: now, h: Float32Array.from(stepViz(state, fl, sr, an.fftSize)) });
+        const due = now - currentDelayMs();
+        // Ambil frame terbaru yang waktunya sudah "jatuh tempo" (tanpa jeda = frame terbaru).
+        while (queue.length > 1 && queue[1].t <= due) queue.shift();
+        if (queue.length > 120) queue.splice(0, queue.length - 120);
+        const h = queue[0].h;
         for (let i = 0; i < N; i++) {
           const el = bars[i];
           if (el) el.style.transform = `scaleY(${h[i].toFixed(3)})`;
