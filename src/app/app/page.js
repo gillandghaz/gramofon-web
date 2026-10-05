@@ -2394,6 +2394,8 @@ function PlaylistPanel({
                   (dragIdx === idx ? " is-dragging" : "") +
                   (overIdx === idx ? " is-dragover" : "")
                 }
+                data-dg="panel"
+                data-di={idx}
                 draggable={canReorder}
                 onDragStart={() => setDragIdx(idx)}
                 onDragOver={(e) => {
@@ -2409,7 +2411,16 @@ function PlaylistPanel({
                 }}
               >
                 {canReorder && (
-                  <span className="gp-drag-handle" data-tip="Geser untuk urutkan">
+                  <span
+                    className="gp-drag-handle"
+                    data-tip="Geser untuk urutkan"
+                    onPointerDown={(e) => startTouchDrag(e, "panel", idx, setDragIdx, setOverIdx, (from, to) => {
+                      const ids = panelItems.map((m) => m.id);
+                      const [moved] = ids.splice(from, 1);
+                      ids.splice(to, 0, moved);
+                      onReorder(ids);
+                    })}
+                  >
                     <IconGrip style={{ width: 14, height: 14 }} />
                   </span>
                 )}
@@ -2528,6 +2539,67 @@ function AssignCategoryModal({ media, categories, busy, err, onCancel, onPick })
   );
 }
 
+// Drag lewat sentuhan (Android/iPhone) untuk daftar yang diurutkan. Drag HTML5
+// bawaan tidak jalan di layar sentuh, jadi pada pegangan (⋮⋮) dipakai pointer
+// events. Mouse tetap memakai drag HTML5 biasa (dilewati di sini).
+// Baris wajib punya atribut data-dg="<grup>" dan data-di="<indeks>".
+function startTouchDrag(e, group, idx, setDrag, setOver, onDrop) {
+  if (e.pointerType === "mouse") return;
+  e.preventDefault();
+  let current = idx;
+  let lastY = e.clientY;
+  let raf = 0;
+  setDrag(idx);
+  setOver(idx);
+  const scroller = (() => {
+    let el = e.currentTarget;
+    while (el && el !== document.body) {
+      const oy = getComputedStyle(el).overflowY;
+      if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight) return el;
+      el = el.parentElement;
+    }
+    return null;
+  })();
+  const pick = (x, y) => {
+    const el = document.elementFromPoint(x, y);
+    const row = el && el.closest ? el.closest('[data-dg="' + group + '"]') : null;
+    if (row) {
+      current = Number(row.getAttribute("data-di"));
+      setOver(current);
+    }
+  };
+  const tick = () => {
+    if (scroller) {
+      const r = scroller.getBoundingClientRect();
+      if (lastY < r.top + 36) scroller.scrollTop -= 8;
+      else if (lastY > r.bottom - 36) scroller.scrollTop += 8;
+    }
+    raf = requestAnimationFrame(tick);
+  };
+  raf = requestAnimationFrame(tick);
+  let x = e.clientX;
+  const onMove = (ev) => {
+    ev.preventDefault();
+    x = ev.clientX;
+    lastY = ev.clientY;
+    pick(x, lastY);
+  };
+  const end = (ok) => {
+    cancelAnimationFrame(raf);
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    window.removeEventListener("pointercancel", onCancel);
+    setDrag(null);
+    setOver(null);
+    if (ok && current !== idx) onDrop(idx, current);
+  };
+  const onUp = () => end(true);
+  const onCancel = () => end(false);
+  window.addEventListener("pointermove", onMove, { passive: false });
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onCancel);
+}
+
 // Popup bersama untuk "Lihat & edit daftar media" (Playlist) dan
 // "Edit & Tampilkan Media" (Kategori Explore): memilih media mana yang
 // termasuk DAN mengurutkannya (seret ikon di kiri, atau tombol panah).
@@ -2590,12 +2662,6 @@ function OrderedMembersModal({
     next.splice(to, 0, m);
     setIds(next);
   }
-  function handleDrop(idx) {
-    if (dragIdx !== null) move(dragIdx, idx);
-    setDragIdx(null);
-    setOverIdx(null);
-  }
-
   return (
     <div className="confirm-backdrop" onClick={busy ? undefined : onCancel}>
       <div className="confirm-card confirm-card--wide" onClick={(e) => e.stopPropagation()}>
@@ -2619,14 +2685,16 @@ function OrderedMembersModal({
               <div
                 key={id}
                 className={"gp-omrow" + (dragIdx === idx ? " is-dragging" : "") + (overIdx === idx && dragIdx !== null && dragIdx !== idx ? " is-dragover" : "")}
+                data-dg="om"
+                data-di={idx}
                 draggable={canDrag}
                 onDragStart={canDrag ? () => setDragIdx(idx) : undefined}
                 onDragOver={canDrag ? (e) => { e.preventDefault(); setOverIdx(idx); } : undefined}
-                onDrop={canDrag ? () => handleDrop(idx) : undefined}
+                onDrop={canDrag ? () => { move(dragIdx, idx); setDragIdx(null); setOverIdx(null); } : undefined}
                 onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
               >
                 {reorderable && !readOnly && (
-                  <span className={"gp-drag-handle" + (canDrag ? "" : " is-off")} data-tip={canDrag ? "Geser untuk urutkan" : "Hapus pencarian untuk mengurutkan"}>
+                  <span onPointerDown={canDrag ? (e) => startTouchDrag(e, "om", idx, setDragIdx, setOverIdx, move) : undefined} className={"gp-drag-handle" + (canDrag ? "" : " is-off")} data-tip={canDrag ? "Geser untuk urutkan" : "Hapus pencarian untuk mengurutkan"}>
                     <IconGrip style={{ width: 14, height: 14 }} />
                   </span>
                 )}
@@ -2886,13 +2954,25 @@ function ManageMediaView({
                   (plOverIdx === idx ? " is-dragover" : "")
                 }
                 onClick={() => setPlaylistFilter(pl.id)}
+                data-dg="pl"
+                data-di={idx}
                 draggable
                 onDragStart={() => setPlDragIdx(idx)}
                 onDragOver={(e) => { e.preventDefault(); setPlOverIdx(idx); }}
                 onDrop={() => handlePlaylistDrop(idx)}
                 onDragEnd={() => { setPlDragIdx(null); setPlOverIdx(null); }}
               >
-                <span className="gp-drag-handle" data-tip="Geser untuk urutkan" onClick={(e) => e.stopPropagation()}>
+                <span
+                  className="gp-drag-handle"
+                  data-tip="Geser untuk urutkan"
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => startTouchDrag(e, "pl", idx, setPlDragIdx, setPlOverIdx, (from, to) => {
+                    const ids = playlists.map((p) => p.id);
+                    const [moved] = ids.splice(from, 1);
+                    ids.splice(to, 0, moved);
+                    onReorderPlaylists(ids);
+                  })}
+                >
                   <IconGrip style={{ width: 14, height: 14 }} />
                 </span>
                 <div className="gp-info">
@@ -3046,6 +3126,8 @@ function ManageMediaView({
                 <tr
                   key={m.id}
                   className={(nowPlayingId === m.id ? "is-current " : "") + (dragIdx === idx ? "is-dragging " : "") + (overIdx === idx ? "is-dragover " : "")}
+                  data-dg="row"
+                  data-di={idx}
                   draggable={canDrag}
                   onDragStart={() => setDragIdx(idx)}
                   onDragOver={(e) => { if (canDrag) { e.preventDefault(); setOverIdx(idx); } }}
@@ -3053,7 +3135,16 @@ function ManageMediaView({
                   onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
                 >
                   {canDrag && (
-                    <td className="gp-drag-col" data-tip="Geser untuk urutkan">
+                    <td
+                      className="gp-drag-col"
+                      data-tip="Geser untuk urutkan"
+                      onPointerDown={(e) => startTouchDrag(e, "row", idx, setDragIdx, setOverIdx, (from, to) => {
+                        const ids = rows.map((r) => r.id);
+                        const [moved] = ids.splice(from, 1);
+                        ids.splice(to, 0, moved);
+                        onReorderPlaylist(activePlaylist.id, ids);
+                      })}
+                    >
                       <IconGrip style={{ width: 14, height: 14, color: "var(--gp-dim)" }} />
                     </td>
                   )}
@@ -3269,6 +3360,8 @@ function ExploreView({
                 {categories.map((c, idx) => (
                   <li
                     key={c}
+                    data-dg="cat"
+                    data-di={idx}
                     className={"gp-catrow" + (catDragIdx === idx ? " is-dragging" : "") + (catOverIdx === idx ? " is-dragover" : "")}
                     draggable
                     onDragStart={() => setCatDragIdx(idx)}
@@ -3276,7 +3369,16 @@ function ExploreView({
                     onDrop={() => handleCatDrop(idx)}
                     onDragEnd={() => { setCatDragIdx(null); setCatOverIdx(null); }}
                   >
-                    <span className="gp-drag-handle" data-tip="Geser untuk urutkan">
+                    <span
+                      className="gp-drag-handle"
+                      data-tip="Geser untuk urutkan"
+                      onPointerDown={(e) => startTouchDrag(e, "cat", idx, setCatDragIdx, setCatOverIdx, (from, to) => {
+                        const next = [...categories];
+                        const [moved] = next.splice(from, 1);
+                        next.splice(to, 0, moved);
+                        onReorderCategories(next);
+                      })}
+                    >
                       <IconGrip style={{ width: 14, height: 14 }} />
                     </span>
                     {renamingCategory?.old === c ? (

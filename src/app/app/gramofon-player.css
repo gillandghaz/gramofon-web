@@ -600,3 +600,13 @@ html[data-reduce-motion="true"] .gramofon-player .gp-disc{animation:none !import
 .gp-omarrow{width:22px;height:22px;border-radius:6px;font-size:9px;line-height:1;color:var(--gp-muted,#8b93a7);display:grid;place-items:center}
 .gp-omarrow:hover:not(:disabled){background:rgba(255,255,255,.08);color:var(--gp-text,#fff)}
 .gp-omarrow:disabled{opacity:.25;cursor:default}
+.gp-omrow .gp-drag-handle{touch-action:none;user-select:none;-webkit-user-select:none}
+.gp-omrow.is-dragging{cursor:grabbing}
+/* Pegangan geser: area sentuh lebih besar di layar sentuh */
+.gramofon-player .gp-drag-col{touch-action:none;user-select:none;-webkit-user-select:none}
+@media (pointer:coarse){
+  .gramofon-player .gp-drag-handle,.gp-omrow .gp-drag-handle{width:32px;min-height:36px;touch-action:none;-webkit-touch-callout:none}
+  .gramofon-player .gp-drag-col{width:36px;min-width:36px}
+  .gramofon-player .gp-pl-row .gp-drag-handle,.gramofon-player .gp-drag-spacer,.gp-omrow .gp-drag-spacer{width:32px}
+  .gramofon-player [draggable=true]{-webkit-user-drag:none}
+}
