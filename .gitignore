@@ -6,3 +6,7 @@ out/
 .env*.local
 *.log
 .DS_Store
+*-firebase-adminsdk-*.json
+serviceAccount*.json
+*.pem
+*.key
