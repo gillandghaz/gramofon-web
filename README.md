@@ -13,7 +13,7 @@
 ![Node](https://img.shields.io/badge/Node-%E2%89%A5%2022-339933?logo=nodedotjs&logoColor=white)
 ![Deploy](https://img.shields.io/badge/Deploy-Vercel-000000?logo=vercel&logoColor=white)
 
-[Fitur](#-fitur) · [Arsitektur](#-arsitektur) · [Mulai Cepat](#-mulai-cepat) · [Konfigurasi](#-konfigurasi) · [API](#-referensi-api) · [Keamanan](#-keamanan) · [Peta Jalan](#-peta-jalan)
+[Fitur](#-fitur) · [Arsitektur](#-arsitektur) · [Mulai Cepat](#-mulai-cepat) · [Konfigurasi](#-konfigurasi) · [API](#-referensi-api) · [Keamanan](#-keamanan) · [Peta Jalan](#-peta-jalan--batasan-yang-diketahui) · [Hak Cipta](#-hak-cipta)
 
 </div>
 
@@ -34,6 +34,8 @@ Prinsip rancangan:
 | **Semua media di Cloudinary** | Video, audio, thumbnail, dan foto profil diunggah langsung ke Cloudinary. |
 | **Server sebagai penjaga** | Otorisasi, kuota, dan pembatasan pendaftaran ditegakkan di server, bukan hanya di UI. |
 | **Mobile-first** | Dirancang untuk desktop, Android, dan iPhone, termasuk kontrol layar kunci. |
+
+> **Hak cipta:** kode sumber ini dipublikasikan agar dapat **dilihat dan dipelajari**. Tidak ada lisensi yang memberi izin menyalin, memodifikasi, atau menyebarkannya tanpa izin tertulis pemilik. Lihat [Hak Cipta](#-hak-cipta). Panduan teknis di bawah ditujukan bagi pemilik/pengelola proyek.
 
 ---
 
@@ -253,14 +255,14 @@ Token diverifikasi di server beserta pengecekan pencabutan sesi.
 Pelaporan celah keamanan: lihat [SECURITY.md](./SECURITY.md).
 
 <details>
-<summary><b>Daftar periksa sebelum repositori dibuka ke publik</b></summary>
+<summary><b>Daftar periksa bagi pengelola (sebelum rilis)</b></summary>
 
 - [ ] `.env.local` dan berkas JSON *service account* tidak pernah ter-commit (`git log --all -- .env.local`, dan cari nama berkas rahasia lain di riwayat).
-- [ ] Jika ada rahasia yang pernah ter-commit, **putar (rotate)** — buat ulang private key Firebase dan API Secret Cloudinary. Menghapus berkas tidak cukup karena tetap ada di riwayat.
-- [ ] `firestore.rules` terbaru sudah dipublikasikan.
+- [ ] Jika ada rahasia yang pernah ter-commit, **putar (rotate)**: buat ulang private key Firebase dan API Secret Cloudinary. Menghapus berkas tidak cukup karena tetap ada di riwayat.
+- [ ] `firestore.rules` terbaru sudah dipublikasikan di Firebase Console.
 - [ ] *Authorized domains* Firebase hanya berisi domain yang dipakai.
 - [ ] Peringatan pemakaian Cloudinary sudah diatur.
-- [ ] Berkas `LICENSE` sudah ditambahkan.
+- [ ] *Dependabot alerts*, *Private vulnerability reporting*, dan (bila tersedia) *Secret scanning* aktif di GitHub.
 
 </details>
 
@@ -319,14 +321,20 @@ src/
 firestore.rules            Security Rules Firestore
 next.config.js             Header keamanan & CSP
 .env.local.example         Templat variabel lingkungan (tanpa nilai)
+SECURITY.md                Kebijakan pelaporan celah keamanan
+CONTRIBUTING.md            Panduan kontribusi
 ```
 
 ---
 
 ## 🤝 Kontribusi
 
-Lihat [CONTRIBUTING.md](./CONTRIBUTING.md). Singkatnya: jelaskan perubahan, uji manual di desktop dan HP, dan jangan menyertakan rahasia atau data pengguna.
+Saran dan laporan bug sangat dihargai lewat *Issues*. Saat ini proyek **tidak menerima Pull Request**. Detail ada di [CONTRIBUTING.md](./CONTRIBUTING.md).
 
-## 📄 Lisensi
+## 📄 Hak Cipta
 
-Belum ditentukan. Tambahkan berkas `LICENSE` (mis. MIT) sebelum repositori dipublikasikan agar hak penggunaan kode jelas.
+**© 2026 gillandghaz. Seluruh hak dilindungi (All Rights Reserved).**
+
+Repositori ini **tidak memakai lisensi sumber terbuka**. Kode sumber dipublikasikan agar dapat dilihat dan dipelajari. Menyalin, memodifikasi, menjalankan sebagai layanan, atau mendistribusikan ulang kode sumber memerlukan **izin tertulis dari pemilik**. Untuk meminta izin, hubungi pemilik lewat profil GitHub.
+
+Dependensi pihak ketiga (mis. Next.js, React, Firebase SDK, Cloudinary SDK) tetap tunduk pada lisensinya masing-masing.
