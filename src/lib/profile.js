@@ -57,6 +57,16 @@ export async function createUserProfile(user, { username, displayName }) {
 // Beberapa pemanggil (halaman login + self-heal di auth-context) bisa memanggil
 // ini bersamaan untuk akun yang sama -- satu proses saja yang dijalankan,
 // hasil/errornya dibagikan (supaya gerbang server tidak dipanggil dua kali).
+// Akhiran angka 0-9999 untuk username otomatis (mis. dari akun Google).
+// Memakai CSPRNG browser (crypto.getRandomValues), bukan Math.random():
+// username memang bukan rahasia, tetapi nilai yang tak bisa ditebak menghindari
+// tabrakan berulang dan menenangkan pemindai keamanan (CWE-338).
+function randomSuffix() {
+  const buf = new Uint32Array(1);
+  globalThis.crypto.getRandomValues(buf);
+  return buf[0] % 10000;
+}
+
 const inflight = new Map();
 export function ensureUserProfile(user) {
   if (!inflight.has(user.uid)) {
@@ -78,7 +88,7 @@ async function ensureUserProfileOnce(user) {
   let attempt = 0;
   while (!(await isUsernameAvailable(candidate))) {
     attempt += 1;
-    candidate = `${base}${Math.floor(Math.random() * 10000)}`;
+    candidate = `${base}${randomSuffix()}`;
     if (attempt > 8) {
       candidate = `user${user.uid.slice(0, 8)}`;
       break;
