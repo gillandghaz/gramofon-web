@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { requireUser, readJson, errorResponse, HttpError } from "@/lib/server-auth";
-import { getImageInfo, destroyImage, AVATAR_FOLDER, MAX_AVATAR_BYTES } from "@/lib/cloudinary-admin";
+import { getImageInfo, destroyImage, isPublicIdInFolder, AVATAR_FOLDER, MAX_AVATAR_BYTES } from "@/lib/cloudinary-admin";
 
 // Setelah upload ke Cloudinary: server memverifikasi file-nya benar-benar
 // ada di folder milik pemanggil, lalu MENULIS photoURL ke profil lewat
@@ -14,7 +14,7 @@ export async function POST(request) {
     const uid = decoded.uid;
 
     const { publicId } = await readJson(request);
-    if (typeof publicId !== "string" || !publicId.startsWith(`${AVATAR_FOLDER(uid)}/`)) {
+    if (!isPublicIdInFolder(publicId, AVATAR_FOLDER(uid))) {
       throw new HttpError(403, "public_id tidak valid untuk akun ini.");
     }
 

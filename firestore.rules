@@ -52,11 +52,22 @@ service cloud.firestore {
 
       // storageLimitMB TIDAK boleh diisi sendiri saat membuat profil —
       // hanya admin yang boleh menentukan kuota (lihat rule update admin).
+      // Profil baru hanya boleh berisi field pendaftaran, email harus sama
+      // dengan email di token Auth, dan username WAJIB dipesan oleh akun
+      // yang sama di usernames/{username} dalam transaksi yang sama
+      // (getAfter) -- mencegah profil memakai username milik orang lain
+      // (mis. "admin") untuk menyamar.
       allow create: if isSignedIn()
         && registrationOpen()
         && request.auth.uid == userId
         && request.resource.data.role == "user"
-        && !request.resource.data.keys().hasAny(['storageLimitMB', 'photoURL', 'photoPublicId']);
+        && request.resource.data.keys().hasOnly(['email', 'username', 'displayName', 'role', 'createdAt'])
+        && request.resource.data.get('email', null) == request.auth.token.get('email', null)
+        && request.resource.data.username is string
+        && request.resource.data.username.matches('^[a-z0-9_]{1,80}$')
+        && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == request.auth.uid
+        && (!('displayName' in request.resource.data)
+            || (request.resource.data.displayName is string && request.resource.data.displayName.size() <= 200));
 
       // User biasa boleh update profilnya sendiri (nama, settings,
       // readNotifications, dll), TAPI TIDAK PERNAH boleh menyentuh field
@@ -103,7 +114,8 @@ service cloud.firestore {
     // ---- usernames/{username} : menjamin keunikan username.
     match /usernames/{username} {
       allow read: if true;
-      allow create: if (isSignedIn() && registrationOpen() && request.resource.data.uid == request.auth.uid) || isAdmin();
+      allow create: if (isSignedIn() && registrationOpen() && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid'])) || isAdmin();
       allow delete: if isAdmin() ||
         (isSignedIn() && resource.data.uid == request.auth.uid && selfDeleteAllowed());
       allow update: if false;

@@ -1,44 +1,37 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
-import { requireUser, errorResponse } from "@/lib/server-auth";
-import { destroyAsset } from "@/lib/cloudinary-admin";
+import { requireUser, isAdminUid, readJson, errorResponse, HttpError, DOC_ID_RE } from "@/lib/server-auth";
+import { destroyAsset, isPublicIdInFolder, PERSONAL_FOLDER } from "@/lib/cloudinary-admin";
 
 export async function POST(request) {
   try {
-    const authHeader = request.headers.get("authorization") || "";
-    const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-    if (!idToken) return NextResponse.json({ error: "Tidak ada token." }, { status: 401 });
-
     const decoded = await requireUser(request, { requireProfile: false });
     const callerUid = decoded.uid;
 
-    const { mediaId } = await request.json();
-    if (!mediaId) return NextResponse.json({ error: "mediaId wajib diisi." }, { status: 400 });
-
-    const mediaSnap = await adminDb().collection("media").doc(mediaId).get();
-    if (!mediaSnap.exists) {
-      return NextResponse.json({ error: "Media tidak ditemukan." }, { status: 404 });
+    const { mediaId } = await readJson(request);
+    // mediaId disisipkan ke path dokumen -- wajib id Firestore yang bersih
+    // (tanpa "/" yang bisa menunjuk ke sub-koleksi/dokumen lain).
+    if (typeof mediaId !== "string" || !DOC_ID_RE.test(mediaId)) {
+      throw new HttpError(400, "mediaId wajib diisi.");
     }
+
+    const ref = adminDb().collection("media").doc(mediaId);
+    const mediaSnap = await ref.get();
+    if (!mediaSnap.exists) throw new HttpError(404, "Media tidak ditemukan.");
     const media = mediaSnap.data();
 
     // Boleh dihapus oleh ADMIN, atau oleh PEMILIK media itu sendiri —
     // dicek ulang di server, tidak percaya klaim dari browser.
-    const isOwner = media.uid === callerUid;
-    let isAdmin = false;
-    if (!isOwner) {
-      const callerSnap = await adminDb().collection("users").doc(callerUid).get();
-      isAdmin = callerSnap.exists && callerSnap.data().role === "admin";
-    }
-    if (!isOwner && !isAdmin) {
-      return NextResponse.json({ error: "Tidak punya izin menghapus media ini." }, { status: 403 });
+    const isOwner = typeof media.uid === "string" && media.uid === callerUid;
+    if (!isOwner && !(await isAdminUid(callerUid))) {
+      throw new HttpError(403, "Tidak punya izin menghapus media ini.");
     }
 
     // Pertahanan berlapis: hanya hapus file di Cloudinary kalau publicId
     // memang berada di folder milik pemilik media ini. Mencegah dokumen
     // yang publicId-nya dipalsukan dipakai untuk menghapus file orang lain
     // (atau file Explore). Dokumen Firestore-nya tetap dihapus.
-    const expectedPrefix = `gramofon/${media.uid}/`;
-    if (typeof media.publicId === "string" && media.publicId.startsWith(expectedPrefix)) {
+    if (typeof media.uid === "string" && isPublicIdInFolder(media.publicId, PERSONAL_FOLDER(media.uid))) {
       await destroyAsset(media.publicId, media.resourceType).catch((e) =>
         console.error("Gagal hapus asset Cloudinary:", e)
       );
@@ -49,7 +42,7 @@ export async function POST(request) {
       );
     }
 
-    await adminDb().collection("media").doc(mediaId).delete();
+    await ref.delete();
 
     return NextResponse.json({ ok: true });
   } catch (err) {

@@ -16,6 +16,20 @@ export const EXPLORE_FOLDER = "gramofon-explore";
 export const EXPLORE_THUMB_FOLDER = (mediaId) => `gramofon-explore-thumbs/${mediaId}`;
 export const AVATAR_FOLDER = (uid) => `gramofon-avatars/${uid}`;
 
+// public_id hasil upload bertanda tangan: "<folder>/<id acak Cloudinary>".
+// Dicek ketat (bukan sekadar startsWith) supaya tidak bisa diselipkan
+// segmen tambahan seperti "../" atau sub-folder lain.
+const ASSET_NAME = "[A-Za-z0-9_-]{1,120}";
+function escapeRe(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+export function isPublicIdInFolder(publicId, folder) {
+  return (
+    typeof publicId === "string" &&
+    new RegExp(`^${escapeRe(folder)}/${ASSET_NAME}$`).test(publicId)
+  );
+}
+
 // Format yang diizinkan Cloudinary SAAT upload (ikut ditandatangani, jadi
 // browser tidak bisa menggantinya). Tanpa ini, endpoint "auto" menerima
 // file apa pun (HTML, zip, exe, dst) dan menyimpannya sebagai "raw" di

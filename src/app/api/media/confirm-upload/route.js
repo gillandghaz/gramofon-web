@@ -1,44 +1,25 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
-import { requireUser, errorResponse } from "@/lib/server-auth";
-import { destroyAsset, getAssetInfo } from "@/lib/cloudinary-admin";
-
-const DEFAULT_LIMIT_MB = 200;
-
-async function getEffectiveLimitMB(uid) {
-  const [userSnap, settingsSnap] = await Promise.all([
-    adminDb().collection("users").doc(uid).get(),
-    adminDb().collection("settings").doc("app").get(),
-  ]);
-  const userLimit = userSnap.exists ? userSnap.data().storageLimitMB : undefined;
-  if (typeof userLimit === "number" && Number.isFinite(userLimit)) return userLimit;
-  const defaultLimit = settingsSnap.exists ? settingsSnap.data().defaultStorageLimitMB : undefined;
-  return typeof defaultLimit === "number" && Number.isFinite(defaultLimit)
-    ? defaultLimit
-    : DEFAULT_LIMIT_MB;
-}
+import { requireUser, readJson, errorResponse, HttpError } from "@/lib/server-auth";
+import { destroyAsset, getAssetInfo, isPublicIdInFolder, PERSONAL_FOLDER } from "@/lib/cloudinary-admin";
+import { getEffectiveLimitMB } from "@/lib/quota";
 
 export async function POST(request) {
   try {
-    const authHeader = request.headers.get("authorization") || "";
-    const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-    if (!idToken) return NextResponse.json({ error: "Tidak ada token." }, { status: 401 });
-
     const decoded = await requireUser(request);
     const uid = decoded.uid;
 
     // Dari browser kita HANYA terima publicId, resourceType, dan title.
     // Ukuran, URL, format, dan durasi TIDAK dipercaya dari browser — semuanya
     // diambil langsung dari Cloudinary di bawah.
-    const body = await request.json().catch(() => ({}));
-    const { publicId, resourceType, title } = body;
+    const { publicId, resourceType, title } = await readJson(request);
     if (typeof publicId !== "string" || !publicId || !["audio", "video"].includes(resourceType)) {
-      return NextResponse.json({ error: "Data upload tidak lengkap." }, { status: 400 });
+      throw new HttpError(400, "Data upload tidak lengkap.");
     }
-    // public_id yang dikonfirmasi harus benar-benar berada di folder milik
-    // uid ini (gramofon/{uid}/...) — mencegah mengklaim file orang lain.
-    if (!publicId.startsWith(`gramofon/${uid}/`)) {
-      return NextResponse.json({ error: "public_id tidak valid untuk akun ini." }, { status: 403 });
+    // public_id yang dikonfirmasi harus benar-benar berada LANGSUNG di folder
+    // milik uid ini (gramofon/{uid}/<id>) — mencegah mengklaim file orang lain.
+    if (!isPublicIdInFolder(publicId, PERSONAL_FOLDER(uid))) {
+      throw new HttpError(403, "public_id tidak valid untuk akun ini.");
     }
 
     // Ambil data ASLI dari Cloudinary. Kalau file tidak ada di sana,
@@ -48,53 +29,38 @@ export async function POST(request) {
       asset = await getAssetInfo(publicId);
     } catch (e) {
       console.error("confirm-upload: asset tidak ditemukan di Cloudinary:", e?.error?.message || e);
-      return NextResponse.json(
-        { error: "File tidak ditemukan di Cloudinary. Coba upload ulang." },
-        { status: 400 }
-      );
+      throw new HttpError(400, "File tidak ditemukan di Cloudinary. Coba upload ulang.");
     }
     const bytes = Number(asset?.bytes);
     if (!Number.isFinite(bytes) || bytes <= 0 || !asset?.secure_url) {
-      return NextResponse.json({ error: "Data file dari Cloudinary tidak valid." }, { status: 400 });
+      throw new HttpError(400, "Data file dari Cloudinary tidak valid.");
     }
 
-    // PENEGAKAN KUOTA SUNGGUHAN: pemakaian dihitung dari data yang SUDAH
-    // tersimpan, dibandingkan dengan ukuran ASLI file ini dari Cloudinary.
-    const limitMB = await getEffectiveLimitMB(uid);
-    const existingSnap = await adminDb().collection("media").where("uid", "==", uid).get();
-    let usedBytes = 0;
-    let alreadyRegistered = false;
-    existingSnap.forEach((d) => {
-      const data = d.data();
-      if (data.publicId === publicId) alreadyRegistered = true;
-      usedBytes += typeof data.bytes === "number" && data.bytes > 0 ? data.bytes : 0;
-    });
-    // File yang sama tidak boleh didaftarkan dua kali (dan jangan sampai
-    // terhapus oleh jalur "melebihi kuota" di bawah padahal sudah terdaftar).
-    if (alreadyRegistered) {
-      return NextResponse.json({ error: "File ini sudah terdaftar." }, { status: 409 });
-    }
-    const limitBytes = limitMB * 1024 * 1024;
-
-    if (usedBytes + bytes > limitBytes) {
-      await destroyAsset(publicId, resourceType).catch((e) =>
-        console.error("Gagal menghapus file yang melebihi kuota:", e)
-      );
-      return NextResponse.json(
-        {
-          error: `File ini (${(bytes / 1024 / 1024).toFixed(1)}MB) melebihi sisa kuota Anda. File telah dibatalkan/dihapus.`,
-        },
-        { status: 400 }
-      );
-    }
-
+    const limitBytes = (await getEffectiveLimitMB(uid)) * 1024 * 1024;
     const cleanTitle = String(
       typeof title === "string" && title.trim() ? title : publicId.split("/").pop()
     ).slice(0, 120);
 
-    const docRef = await adminDb()
-      .collection("media")
-      .add({
+    // PENEGAKAN KUOTA SUNGGUHAN di dalam TRANSAKSI: hitung pemakaian dan
+    // tambah catatan baru secara atomik, supaya beberapa konfirmasi yang
+    // dikirim bersamaan tidak bisa sama-sama lolos dan melewati kuota.
+    const db = adminDb();
+    const outcome = await db.runTransaction(async (tx) => {
+      const existingSnap = await tx.get(db.collection("media").where("uid", "==", uid));
+      let usedBytes = 0;
+      let alreadyRegistered = false;
+      existingSnap.forEach((d) => {
+        const data = d.data();
+        if (data.publicId === publicId) alreadyRegistered = true;
+        usedBytes += typeof data.bytes === "number" && data.bytes > 0 ? data.bytes : 0;
+      });
+      // File yang sama tidak boleh didaftarkan dua kali (dan jangan sampai
+      // terhapus oleh jalur "melebihi kuota" padahal sudah terdaftar).
+      if (alreadyRegistered) return { status: "duplicate" };
+      if (usedBytes + bytes > limitBytes) return { status: "over-quota" };
+
+      const ref = db.collection("media").doc();
+      tx.set(ref, {
         uid,
         title: cleanTitle,
         publicId,
@@ -105,8 +71,21 @@ export async function POST(request) {
         url: asset.secure_url,
         createdAt: new Date(),
       });
+      return { status: "ok", id: ref.id };
+    });
 
-    return NextResponse.json({ ok: true, id: docRef.id });
+    if (outcome.status === "duplicate") throw new HttpError(409, "File ini sudah terdaftar.");
+    if (outcome.status === "over-quota") {
+      await destroyAsset(publicId, resourceType).catch((e) =>
+        console.error("Gagal menghapus file yang melebihi kuota:", e)
+      );
+      throw new HttpError(
+        400,
+        `File ini (${(bytes / 1024 / 1024).toFixed(1)}MB) melebihi sisa kuota Anda. File telah dibatalkan/dihapus.`
+      );
+    }
+
+    return NextResponse.json({ ok: true, id: outcome.id });
   } catch (err) {
     return errorResponse(err, "media confirm-upload");
   }
